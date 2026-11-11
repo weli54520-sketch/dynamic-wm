@@ -41,13 +41,15 @@ class NotifListener : NotificationListenerService() {
 
     private var msm: MediaSessionManager? = null
     private val controllers = HashMap<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
-    private var pausedSince = 0L
-    private var artId = -1
-    private var artScaled: Bitmap? = null
-    private var artColor = 0
+    /** لكل تطبيق موسيقى: متى توقف، وغلافه المصغر ولونه */
+    private class ArtCache(var id: Int = -1, var bmp: Bitmap? = null, var color: Int = 0)
+    private val pausedSince = HashMap<String, Long>()
+    private val arts = HashMap<String, ArtCache>()
+    /** مفاتيح الموسيقى المعروضة الحين (media:<الحزمة>) */
+    private val mediaKeys = HashSet<String>()
 
-    /** آخر وقت انعرض فيه كل إشعار (عشان التحديثات الصامتة ما تطلع مرة ثانية) */
-    private val shown = HashMap<String, Long>()
+    /** آخر محتوى انعرض لكل إشعار (بدون الأرقام) عشان التحديثات ما تفتح الجزيرة كل ثانية */
+    private val shown = HashMap<String, String>()
 
     private val mediaTick = Runnable { updateMedia() }
 
@@ -65,7 +67,7 @@ class NotifListener : NotificationListenerService() {
     override fun onListenerDisconnected() {
         instance = null
         teardownMedia()
-        Hub.removeIf { it.key.startsWith("n:") || it.key.startsWith("nb:") || it.key == "media" }
+        Hub.removeIf { it.key.startsWith("n:") || it.key.startsWith("nb:") || it.key.startsWith("media") }
         try { requestRebind(ComponentName(this, NotifListener::class.java)) } catch (_: Exception) {}
     }
 
@@ -194,8 +196,12 @@ class NotifListener : NotificationListenerService() {
         if (title.isEmpty() && text.isEmpty()) return
         if (importance(sbn) < 3) return // الإشعارات الصامتة
         if (P.notifSkipOpen.v && pkg == Hub.foregroundPkg) return
-        if (flags and Notification.FLAG_ONLY_ALERT_ONCE != 0 && shown.containsKey(sbn.key)) return
-        shown[sbn.key] = SystemClock.uptimeMillis()
+        // نفس الإشعار تحدّث (مثل عداد التسجيل أو نسبة): ما نفتح الجزيرة مرة ثانية
+        val sig = (title + "\u0001" + text).replace(DIGITS, "")
+        val prev = shown[sbn.key]
+        if (prev != null && (prev == sig || flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)) return
+        if (chrono) return // فيه عداد يمشي = مو رسالة
+        shown[sbn.key] = sig
 
         val locked = try { getSystemService(KeyguardManager::class.java).isKeyguardLocked } catch (_: Exception) { false }
         val hide = locked && P.notifHideLocked.v
@@ -259,21 +265,35 @@ class NotifListener : NotificationListenerService() {
 
     private fun updateMedia() {
         main.removeCallbacks(mediaTick)
-        val list = controllers.values.map { it.first }
-        val playing = list.firstOrNull { isPlaying(it) && it.metadata != null }
-        val c = playing ?: list.firstOrNull { it.metadata != null && isPaused(it) }
-        val md = c?.metadata
-        if (c == null || md == null) { Hub.remove("media"); return }
-        val isPlaying = playing != null
-        // الإيقاف المؤقت: تبقى دقيقة وبعدها تختفي
-        if (isPlaying) pausedSince = 0L else {
-            val nowT = SystemClock.elapsedRealtime()
-            if (pausedSince == 0L) pausedSince = nowT
-            val keep = P.mediaKeep.v.coerceIn(0, 300) * 1000L
-            if (nowT - pausedSince >= keep) { Hub.remove("media"); return }
-            main.postDelayed(mediaTick, keep + 300 - (nowT - pausedSince))
+        val list = controllers.values.map { it.first }.filter { it.metadata != null && (isPlaying(it) || isPaused(it)) }
+        // تطبيق واحد ممكن يكون عنده أكثر من جلسة: ناخذ الشغالة أول
+        val byPkg = list.groupBy { it.packageName }.mapValues { (_, cs) -> cs.firstOrNull { isPlaying(it) } ?: cs.first() }
+        val nowT = SystemClock.elapsedRealtime()
+        val keep = P.mediaKeep.v.coerceIn(0, 300) * 1000L
+        var nextCheck = Long.MAX_VALUE
+        val alive = HashSet<String>()
+        byPkg.forEach { (pkg, c) ->
+            val key = "media:$pkg"
+            val playing = isPlaying(c)
+            // الإيقاف المؤقت: تبقى شوي وبعدها تختفي
+            if (playing) pausedSince.remove(pkg) else {
+                val since = pausedSince.getOrPut(pkg) { nowT }
+                val left = keep - (nowT - since)
+                if (left <= 0) return@forEach
+                nextCheck = minOf(nextCheck, left + 300)
+            }
+            val md = c.metadata ?: return@forEach
+            alive += key
+            Hub.put(mediaAct(key, pkg, c, md, playing))
         }
+        pausedSince.keys.retainAll(byPkg.keys)
+        arts.keys.retainAll(byPkg.keys)
+        (mediaKeys - alive).forEach { Hub.remove(it) }
+        mediaKeys.clear(); mediaKeys += alive
+        if (nextCheck != Long.MAX_VALUE) main.postDelayed(mediaTick, nextCheck)
+    }
 
+    private fun mediaAct(key: String, pkg: String, c: MediaController, md: MediaMetadata, playing: Boolean): Act {
         val title = md.getString(MediaMetadata.METADATA_KEY_TITLE) ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE) ?: ""
         val artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?: md.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
@@ -281,13 +301,12 @@ class NotifListener : NotificationListenerService() {
         val art = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-        prepareArt(art)
+        val cache = prepareArt(pkg, art)
 
         val st = c.playbackState
         val tc = c.transportControls
         val acts = st?.actions ?: 0L
         val canSeek = acts and PlaybackState.ACTION_SEEK_TO != 0L
-        val pkg = c.packageName
         val ctl = Controls(
             playPause = { if (isPlaying(c)) tc.pause() else tc.play() },
             next = { tc.skipToNext() },
@@ -295,39 +314,41 @@ class NotifListener : NotificationListenerService() {
             seek = if (canSeek) ({ p: Long -> tc.seekTo(p) }) else null,
             open = { if (c.sessionActivity?.fire() != true) openApp(this, pkg) },
         )
-        Hub.put(Act(
-            "media", Kind.MEDIA, if (isPlaying) Pri.MEDIA else Pri.MEDIA_PAUSED,
+        return Act(
+            key, Kind.MEDIA, if (playing) Pri.MEDIA else Pri.MEDIA_PAUSED,
             title = title, text = artist, app = Apps.label(this, pkg), pkg = pkg,
-            icon = artScaled ?: Apps.icon(this, pkg), accent = if (artScaled != null) artColor else 0,
-            playing = isPlaying, position = st?.position ?: 0L,
+            icon = cache.bmp ?: Apps.icon(this, pkg), accent = if (cache.bmp != null) cache.color else 0,
+            playing = playing, position = st?.position ?: 0L,
             duration = md.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0L),
             posAt = st?.lastPositionUpdateTime ?: 0L,
             speed = (st?.playbackSpeed ?: 1f).let { if (it <= 0f) 1f else it },
             controls = ctl,
-        ))
+        )
     }
 
-    /** نصغّر صورة الغلاف ونطلع لونها (مرة وحدة لكل صورة) */
-    private fun prepareArt(art: Bitmap?) {
-        if (art == null) { artScaled = null; artId = -1; artColor = 0; return }
+    /** نصغّر صورة الغلاف ونطلع لونها (مرة وحدة لكل صورة، ولكل تطبيق لحاله) */
+    private fun prepareArt(pkg: String, art: Bitmap?): ArtCache {
+        val cache = arts.getOrPut(pkg) { ArtCache() }
+        if (art == null) { cache.id = -1; cache.bmp = null; cache.color = 0; return cache }
         val id = System.identityHashCode(art) * 31 + art.generationId
-        if (id == artId) return
-        artId = id
-        artScaled = try {
+        if (id == cache.id) return cache
+        cache.id = id
+        cache.bmp = try {
             val w = art.width.coerceAtLeast(1); val h = art.height.coerceAtLeast(1)
             val s = 160f / maxOf(w, h)
             if (s < 1f) Bitmap.createScaledBitmap(art, (w * s).toInt().coerceAtLeast(1), (h * s).toInt().coerceAtLeast(1), true)
             else art.copy(art.config ?: Bitmap.Config.ARGB_8888, false)
         } catch (_: Exception) { null }
-        artColor = 0
-        val src = artScaled ?: return
+        cache.color = 0
+        val src = cache.bmp ?: return cache
         bg.execute {
             val col = try {
                 val p = Palette.from(src).maximumColorCount(16).generate()
                 p.getVibrantColor(p.getLightVibrantColor(p.getDominantColor(0)))
             } catch (_: Exception) { 0 }
-            main.post { if (artId == id) { artColor = col; updateMedia() } }
+            main.post { if (cache.id == id) { cache.color = col; updateMedia() } }
         }
+        return cache
     }
 
     companion object {
@@ -338,6 +359,7 @@ class NotifListener : NotificationListenerService() {
         private val CLOCKS = setOf(
             "com.sec.android.app.clockpackage", "com.google.android.deskclock", "com.android.deskclock",
         )
+        private val DIGITS = Regex("[0-9\u0660-\u0669:.,٫%]")
         private val SYSTEM = setOf("android", "com.android.systemui", "com.android.providers.downloads.ui")
     }
 }

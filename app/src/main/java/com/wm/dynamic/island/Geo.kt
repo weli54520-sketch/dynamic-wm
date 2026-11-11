@@ -36,6 +36,12 @@ data class Geo(
 
     fun compactW(): Float = gap() + 2 * (compactH() * 1.55f + prefs.extraW.v / 2f)
 
+    /** حجم البذرة اللي تطلع منها الجزيرة وترجع لها (قد فتحة الكاميرا) */
+    fun seed(): Float {
+        val cam = if (hasCam && prefs.autoCam.v) maxOf(camW, camH) + 2f else compactH() * 0.55f
+        return cam.coerceIn(10f, compactH())
+    }
+
     fun expandedW(): Float = (wDp - 20f).coerceAtMost(440f)
 
     /** مركز الجزيرة أفقياً (من يسار الشاشة) */

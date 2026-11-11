@@ -29,6 +29,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -150,12 +151,19 @@ fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -
     acts.forEach { latest[it.key] = it }
 
     val off = rev < 0 || !st.screenOn || !P.enabled.v || (g.landscape && P.hideLandscape.v)
-    val top = if (off) null else acts.firstOrNull()
-    val second = if (off || !P.secondBubble.v) null else acts.getOrNull(1)?.takeIf { it.kind != Kind.PREVIEW }
+    // الأحداث المؤقتة والمكالمات تغطي على أي شي. غير كذا: اللي اختاره المستخدم، أو الأهم
+    val first = if (off) null else acts.firstOrNull()
+    val picked = if (off) null else acts.firstOrNull { it.key == st.selected }
+    val top = if (first != null && (first.until > 0 || first.priority >= Pri.CALL_ON)) first else picked ?: first
+    val second = if (off || !P.secondBubble.v) null else acts.firstOrNull { it.key != top?.key && it.kind != Kind.PREVIEW }
     val keepIdle = P.idle.v == "pill"
+    // التطبيقات الشغالة اللي تقدر تختار بينها من المكبرة
+    val picks = if (off) emptyList() else acts.filter { it.until == 0L && it.kind != Kind.PREVIEW }
 
     val autoExp = top != null && (top.autoExpand || top.kind == Kind.NOTIF || top.kind == Kind.GREETING || top.kind == Kind.CALL_IN)
-    LaunchedEffect(top?.key) { st.expanded = autoExp }
+    LaunchedEffect(top?.key) {
+        if (st.keepOpen) st.keepOpen = false else st.expanded = autoExp
+    }
     val expanded = st.expanded && top != null
 
     // ترجع صغيرة لحالها بعد شوي لو ما لمستها
@@ -174,8 +182,10 @@ fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -
     LaunchedEffect(wantVisible, off) {
         when {
             off -> alpha.snapTo(0f)
-            wantVisible -> alpha.animateTo(1f, tween(70))
-            else -> { delay(330); alpha.animateTo(0f, tween(160)) }
+            // تبدأ بحجم الكاميرا وبلونها، فتبان كأنها طالعة منها
+            wantVisible -> alpha.snapTo(1f)
+            // تنكمش لين حجم الكاميرا، وبعدين تذوب فيها
+            else -> { delay(260); alpha.animateTo(0f, tween(120)) }
         }
     }
     val visible by remember { derivedStateOf { alpha.value > 0.01f } }
@@ -210,10 +220,10 @@ fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -
             ) {
                 val bubble = second != null && !expanded && top != null
                 if (bubble) Spacer(Modifier.width(H.dp + 6.dp))
-                IslandBody(st, tr, top, expanded, latest, g)
+                IslandBody(st, tr, top, expanded, latest, g, picks, keepIdle)
                 if (bubble && second != null) {
                     Spacer(Modifier.width(6.dp))
-                    Bubble(second, g)
+                    Bubble(second, g, st)
                 }
             }
         }
@@ -222,16 +232,29 @@ fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-private fun IslandBody(st: IslandState, tr: Transition<Face>, top: Act?, expanded: Boolean, latest: Map<String, Act>, g: Geo) {
+private fun IslandBody(
+    st: IslandState, tr: Transition<Face>, top: Act?, expanded: Boolean, latest: Map<String, Act>, g: Geo,
+    picks: List<Act>, keepIdle: Boolean,
+) {
     PrefRev.current
     val H = g.compactH()
+    val seed = g.seed()
     val glass = P.style.v == "glass"
     // نابض مثل iOS: سريع مع ارتداد خفيف
     val stiff = when (P.speed.v) { 0 -> 320f; 2 -> 1100f; else -> 620f }
     val damp = 0.78f
     val corner by tr.animateDp(transitionSpec = { spring(damp, stiff) }, label = "corner") { f ->
-        if (f.mode == 2) 38.dp else (H / 2f).dp
+        when {
+            f.mode == 2 -> 38.dp
+            f.mode == 0 && !keepIdle -> (seed / 2f).dp
+            else -> (H / 2f).dp
+        }
     }
+    // البذرة (حجم الكاميرا) تكون بنص الجزيرة بالضبط، فوق الكاميرا
+    val seedPad by tr.animateDp(transitionSpec = { spring(damp, stiff) }, label = "seedPad") { f ->
+        if (f.mode == 0 && !keepIdle) ((H - seed) / 2f).coerceAtLeast(0f).dp else 0.dp
+    }
+    val pickList by rememberUpdatedState(picks)
     val glowTarget = if (P.glow.v && top != null && top.kind != Kind.PREVIEW) tint(top).copy(alpha = 0.7f) else Color.Transparent
     val glow by animateColorAsState(glowTarget, tween(300), label = "glow")
     // خلفية تاخذ لون الغلاف أو الفيديو وهي مكبرة
@@ -252,6 +275,7 @@ private fun IslandBody(st: IslandState, tr: Transition<Face>, top: Act?, expande
     tr.AnimatedContent(
         modifier = Modifier
             .graphicsLayer { scaleX = press; scaleY = press }
+            .padding(top = seedPad)
             .islandBg(shape, glass, glow, bgTint)
             // أي لمسة = نأجل التصغير التلقائي
             .pointerInput(Unit) {
@@ -292,6 +316,23 @@ private fun IslandBody(st: IslandState, tr: Transition<Face>, top: Act?, expande
                         }
                     },
                 ) { change, dy -> total += dy; change.consume() }
+            }
+            .pointerInput(Unit) {
+                // سحب يمين/يسار وهي مكبرة = التطبيق اللي بعده
+                var dx = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dx = 0f },
+                    onDragEnd = {
+                        val list = pickList
+                        val a = cur
+                        if (isExp && a != null && list.size > 1 && kotlin.math.abs(dx) > 60f) {
+                            val i = list.indexOfFirst { it.key == a.key }
+                            val n = list.size
+                            val j = if (dx < 0) (i + 1).mod(n) else (i - 1 + n).mod(n)
+                            buzz(); st.keepOpen = true; st.selected = list[j].key
+                        }
+                    },
+                ) { change, d -> dx += d; change.consume() }
             },
         transitionSpec = {
             // الشكل يكبر أول، والمحتوى يبان بعده بلحظة
@@ -303,9 +344,9 @@ private fun IslandBody(st: IslandState, tr: Transition<Face>, top: Act?, expande
     ) { f ->
         val a = latest[f.key]
         when {
-            f.mode == 0 || a == null -> Idle(g)
+            f.mode == 0 || a == null -> Idle(g, keepIdle)
             f.mode == 1 -> Compact(a, g)
-            else -> Expanded(a, g, st)
+            else -> Expanded(a, g, st, pickList)
         }
     }
 }
@@ -411,9 +452,10 @@ private fun mediaPos(a: Act): Long {
 // ───────────── الحالات ─────────────
 
 @Composable
-private fun Idle(g: Geo) {
+private fun Idle(g: Geo, pill: Boolean) {
     val H = g.compactH()
-    Box(Modifier.size(max(H, g.gap() + H * 0.9f).dp, H.dp))
+    if (pill) Box(Modifier.size(max(H, g.gap() + H * 0.9f).dp, H.dp))
+    else { val s = g.seed(); Box(Modifier.size(s.dp, s.dp)) }
 }
 
 @Composable
@@ -469,7 +511,9 @@ private fun Trail(a: Act, H: Float, maxW: Float) {
         Kind.VOLUME -> LevelBar(a.level / 100f, c, Modifier.width((maxW * 0.8f).coerceAtMost(48f).dp).height((H * 0.18f).dp))
         Kind.UNLOCK -> Unit
         Kind.PREVIEW -> txt("WM", c)
-        Kind.NAV, Kind.ONGOING, Kind.NOTIF, Kind.GREETING -> txt(a.text.ifEmpty { a.title }, Color.White)
+        // التطبيقات الشغالة بالخلفية: نقطة بلونها بدل نص طويل يتقص
+        Kind.ONGOING -> Box(Modifier.size((H * 0.24f).dp).clip(CircleShape).background(c))
+        Kind.NAV, Kind.NOTIF, Kind.GREETING -> txt(a.text.ifEmpty { a.title }, Color.White)
         else -> txt(a.text, c)
     }
 }
@@ -512,12 +556,18 @@ private fun LevelBar(p: Float, color: Color, modifier: Modifier) {
 }
 
 @Composable
-private fun Bubble(a: Act, g: Geo) {
+private fun Bubble(a: Act, g: Geo, st: IslandState) {
     val H = g.compactH()
     val glass = P.style.v == "glass"
     Box(
         Modifier.size(H.dp).islandBg(CircleShape, glass, Color.Transparent, Color.Transparent)
-            .pointerInput(a.key) { detectTapGestures(onTap = { a.controls?.open?.invoke() }) },
+            // ضغطة = تصير هي الأساسية، ضغطة طويلة = تفتح تطبيقها
+            .pointerInput(a.key) {
+                detectTapGestures(
+                    onTap = { st.selected = a.key },
+                    onLongPress = { a.controls?.open?.invoke() },
+                )
+            },
         contentAlignment = Alignment.Center,
     ) { Lead(a, (H * 0.6f).dp) }
 }
@@ -525,7 +575,7 @@ private fun Bubble(a: Act, g: Geo) {
 // ───────────── الجزيرة المكبرة ─────────────
 
 @Composable
-private fun Expanded(a: Act, g: Geo, st: IslandState) {
+private fun Expanded(a: Act, g: Geo, st: IslandState, picks: List<Act>) {
     PrefRev.current
     CompositionLocalProvider(LocalLayoutDirection provides if (isAr) LayoutDirection.Rtl else LayoutDirection.Ltr) {
         Column(Modifier.width(g.expandedW().dp).padding(horizontal = 18.dp, vertical = 16.dp)) {
@@ -535,6 +585,40 @@ private fun Expanded(a: Act, g: Geo, st: IslandState) {
                 Kind.TIMER -> TimerFull(a)
                 else -> GenericFull(a)
             }
+            // أكثر من تطبيق شغال: صف أيقونات تختار منه
+            if (picks.size > 1 && picks.any { it.key == a.key }) Switcher(a, picks, st)
+        }
+    }
+}
+
+@Composable
+private fun Switcher(cur: Act, picks: List<Act>, st: IslandState) {
+    val haptic = LocalHapticFeedback.current
+    Spacer(Modifier.height(12.dp))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+    Spacer(Modifier.height(10.dp))
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        picks.take(6).forEach { p ->
+            val on = p.key == cur.key
+            val ring by animateColorAsState(if (on) tint(p) else Color.Transparent, tween(220), label = "ring")
+            val sc by animateFloatAsState(if (on) 1f else 0.86f, spring(0.6f, 700f), label = "chip")
+            Box(
+                Modifier.size(38.dp).graphicsLayer { scaleX = sc; scaleY = sc; alpha = if (on) 1f else 0.65f }
+                    .clip(CircleShape).border(2.dp, ring, CircleShape)
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .clickable {
+                        if (!on) {
+                            if (P.haptics.v) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            st.keepOpen = true; st.selected = p.key
+                        }
+                        st.touchTick++
+                    },
+                contentAlignment = Alignment.Center,
+            ) { Lead(p, 28.dp) }
         }
     }
 }

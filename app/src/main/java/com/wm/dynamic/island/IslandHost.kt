@@ -36,6 +36,10 @@ class IslandState {
     var screenOn by mutableStateOf(true)
     var expanded by mutableStateOf(false)
     var touchTick by mutableIntStateOf(0)
+    /** النشاط اللي اختاره المستخدم من المكبرة (لو فيه أكثر من تطبيق شغال) */
+    var selected by mutableStateOf<String?>(null)
+    /** التبديل جا من المستخدم: نخليها مكبرة */
+    var keepOpen = false
 }
 
 /** يخلي Compose يشتغل داخل نافذة من خدمة (مو من شاشة) */
