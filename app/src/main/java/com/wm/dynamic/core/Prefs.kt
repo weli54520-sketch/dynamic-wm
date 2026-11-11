@@ -79,6 +79,8 @@ object P {
     val mediaHideOpen = BoolPref("f_media_hide_open", false)
     /** كم ثانية تبقى الموسيقى بعد الإيقاف المؤقت (0 = تختفي فوراً) */
     val mediaKeep = IntPref("f_media_keep", 5)
+    val mediaArtSpin = BoolPref("f_media_spin", false)
+    val mediaTintBg = BoolPref("f_media_tint", true)
     val call = BoolPref("f_call", true)
     val callControls = BoolPref("f_call_ctrl", true)
     val timer = BoolPref("f_timer", true)
@@ -107,7 +109,7 @@ object P {
 
     // الشكل
     /** glass = زجاج سائل ، black = أسود يندمج مع الكاميرا */
-    val style = StrPref("style", "glass")
+    val style = StrPref("style", "black")
     val accent = IntPref("accent", 0)
     val glow = BoolPref("glow", true)
     /** 0 بطيئة ، 1 عادية ، 2 سريعة */

@@ -238,6 +238,8 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
             if (P.media.v) {
                 Sub { ToggleRow(null, cPink, t("حركة الموجة", "Wave animation"), pref = P.mediaWave) }
                 Sub { ToggleRow(null, cPink, t("لون من غلاف الأغنية", "Color from artwork"), pref = P.mediaArtColor) }
+                Sub { ToggleRow(null, cPink, t("خلفية بلون الغلاف أو الفيديو", "Background tinted by artwork"), t("وهي مكبرة", "When expanded"), P.mediaTintBg) }
+                Sub { ToggleRow(null, cPink, t("الغلاف يدور", "Spinning artwork"), t("مثل الأسطوانة وقت التشغيل", "Like a record while playing"), P.mediaArtSpin) }
                 Sub { ToggleRow(null, cPink, t("أخفيها لما يكون تطبيق الموسيقى مفتوح", "Hide while the music app is open"), pref = P.mediaHideOpen) }
                 Sub {
                     SliderRow(t("تختفي بعد الإيقاف", "Hide after pause"), P.mediaKeep.v.toFloat(), 0f..60f,
@@ -316,8 +318,8 @@ fun LookScreen(wide: Boolean) {
     Screen(wide, t("الشكل", "Look"), t("خلّها على ذوقك", "Make it yours")) {
         SectionTitle(t("الستايل", "Style"))
         GlassCard {
-            Segmented(listOf(t("زجاج سائل", "Liquid glass"), t("أسود", "Black")), if (P.style.v == "glass") 0 else 1) {
-                P.style.v = if (it == 0) "glass" else "black"
+            Segmented(listOf(t("أسود (مثل iOS)", "Black (like iOS)"), t("زجاج سائل", "Liquid glass")), if (P.style.v == "glass") 1 else 0) {
+                P.style.v = if (it == 1) "glass" else "black"
             }
             Spacer(Modifier.height(14.dp))
             Text(t("لون التمييز", "Accent color"), style = ts(14.5f, FontWeight.Medium))

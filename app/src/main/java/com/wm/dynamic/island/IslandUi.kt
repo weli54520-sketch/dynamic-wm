@@ -1,11 +1,20 @@
 package com.wm.dynamic.island
 
 import android.os.SystemClock
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Transition
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -130,79 +139,120 @@ private fun ts(size: Float, weight: FontWeight = FontWeight.Normal, color: Color
     TextStyle(fontFamily = Plex, fontSize = size.sp, fontWeight = weight, color = color)
 
 @Composable
-fun IslandView(st: IslandState, onTouchable: (Boolean) -> Unit) {
+fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -> Unit) {
     val rev by Prefs.rev.collectAsState()
     val acts by Hub.list.collectAsState()
     val g = st.geo
     val dens = LocalDensity.current
 
-    // نحفظ آخر نسخة من كل نشاط عشان حركة الاختفاء تلقى شي ترسمه
+    // نحفظ آخر نسخة من كل نشاط عشان حركة الرجوع تلقى شي ترسمه
     val latest = remember { HashMap<String, Act>() }
     acts.forEach { latest[it.key] = it }
 
-    val hidden = rev < 0 || !st.screenOn || !P.enabled.v || (g.landscape && P.hideLandscape.v)
-    val top = if (hidden) null else acts.firstOrNull()
-    val second = if (hidden || !P.secondBubble.v) null else acts.getOrNull(1)?.takeIf { it.kind != Kind.PREVIEW }
-    val idlePill = !hidden && top == null && P.idle.v == "pill"
-    val show = top != null || idlePill
+    val off = rev < 0 || !st.screenOn || !P.enabled.v || (g.landscape && P.hideLandscape.v)
+    val top = if (off) null else acts.firstOrNull()
+    val second = if (off || !P.secondBubble.v) null else acts.getOrNull(1)?.takeIf { it.kind != Kind.PREVIEW }
+    val keepIdle = P.idle.v == "pill"
 
     val autoExp = top != null && (top.autoExpand || top.kind == Kind.NOTIF || top.kind == Kind.GREETING || top.kind == Kind.CALL_IN)
     LaunchedEffect(top?.key) { st.expanded = autoExp }
     val expanded = st.expanded && top != null
 
-    // يصغر لحاله بعد شوي لو ما لمسته
+    // ترجع صغيرة لحالها بعد شوي لو ما لمستها
     LaunchedEffect(expanded, top?.key, st.touchTick) {
         if (expanded && P.autoCollapse.v && top?.kind != Kind.CALL_IN && top?.kind != Kind.NOTIF) {
-            delay(8000); st.expanded = false
+            delay(6000); st.expanded = false
         }
     }
-    SideEffect { onTouchable(show) }
 
+    val face = Face(if (top == null) 0 else if (expanded) 2 else 1, top?.key ?: "")
+    val tr = updateTransition(face, label = "island")
+
+    // الظهور والاختفاء: تطلع من الكاميرا وترجع تدخل فيها
+    val alpha = remember { Animatable(0f) }
+    val wantVisible = !off && (top != null || keepIdle)
+    LaunchedEffect(wantVisible, off) {
+        when {
+            off -> alpha.snapTo(0f)
+            wantVisible -> alpha.animateTo(1f, tween(70))
+            else -> { delay(330); alpha.animateTo(0f, tween(160)) }
+        }
+    }
+    val visible by remember { derivedStateOf { alpha.value > 0.01f } }
+
+    // النافذة: كبيرة وقت الحركة (عشان ما تتعدل كل إطار = سلاسة)، وبمقاس الجزيرة بالضبط وقت السكون
     val H = g.compactH()
+    var measured by remember { mutableStateOf(IntSize.Zero) }
+    val running = tr.isRunning || alpha.isRunning
+    val bigW = with(dens) { (max(g.expandedW(), g.compactW() + 2 * (H + 6f)) + 8f).dp.roundToPx() }
+    val bigH = with(dens) { 320.dp.roundToPx() }
+    SideEffect {
+        when {
+            !visible && !wantVisible -> onWindow(1, 1, false)
+            running || measured.width <= 1 -> onWindow(bigW, bigH, true)
+            else -> onWindow(measured.width, measured.height, true)
+        }
+    }
+
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Ltr,
         LocalDensity provides Density(dens.density, dens.fontScale.coerceAtMost(1.1f)),
         PrefRev provides rev,
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            val bubble = second != null && !expanded && top != null
-            if (bubble) Spacer(Modifier.width(H.dp + 6.dp))
-            AnimatedVisibility(
-                visible = show,
-                enter = fadeIn(tween(180)) + scaleIn(spring(0.7f, 500f), initialScale = 0.5f),
-                exit = fadeOut(tween(160)) + scaleOut(tween(180), targetScale = 0.6f),
+        Box(
+            // لمسة على الفراغ اللي حول الجزيرة = تصغير
+            Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { st.expanded = false } },
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Row(
+                Modifier.onSizeChanged { measured = it }.graphicsLayer { this.alpha = alpha.value },
+                verticalAlignment = Alignment.Top,
             ) {
-                IslandBody(st, top, expanded, latest, g)
-            }
-            if (bubble && second != null) {
-                Spacer(Modifier.width(6.dp))
-                Bubble(second, g)
+                val bubble = second != null && !expanded && top != null
+                if (bubble) Spacer(Modifier.width(H.dp + 6.dp))
+                IslandBody(st, tr, top, expanded, latest, g)
+                if (bubble && second != null) {
+                    Spacer(Modifier.width(6.dp))
+                    Bubble(second, g)
+                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
-private fun IslandBody(st: IslandState, top: Act?, expanded: Boolean, latest: Map<String, Act>, g: Geo) {
+private fun IslandBody(st: IslandState, tr: Transition<Face>, top: Act?, expanded: Boolean, latest: Map<String, Act>, g: Geo) {
     PrefRev.current
     val H = g.compactH()
     val glass = P.style.v == "glass"
-    val stiff = when (P.speed.v) { 0 -> 160f; 2 -> 900f; else -> 380f }
-    val corner by animateDpAsState(if (expanded) 34.dp else (H / 2f).dp, spring(0.8f, stiff), label = "corner")
+    // نابض مثل iOS: سريع مع ارتداد خفيف
+    val stiff = when (P.speed.v) { 0 -> 320f; 2 -> 1100f; else -> 620f }
+    val damp = 0.78f
+    val corner by tr.animateDp(transitionSpec = { spring(damp, stiff) }, label = "corner") { f ->
+        if (f.mode == 2) 38.dp else (H / 2f).dp
+    }
     val glowTarget = if (P.glow.v && top != null && top.kind != Kind.PREVIEW) tint(top).copy(alpha = 0.7f) else Color.Transparent
     val glow by animateColorAsState(glowTarget, tween(300), label = "glow")
+    // خلفية تاخذ لون الغلاف أو الفيديو وهي مكبرة
+    val tintTarget = if (expanded && top != null && top.kind == Kind.MEDIA && P.mediaTintBg.v && top.accent != 0)
+        Color(top.accent).copy(alpha = 0.32f) else Color.Transparent
+    val bgTint by animateColorAsState(tintTarget, tween(450), label = "tint")
     val shape = RoundedCornerShape(corner)
-    val face = Face(if (top == null) 0 else if (expanded) 2 else 1, top?.key ?: "")
     val haptic = LocalHapticFeedback.current
+
+    // ضغطة: تنضغط شوي مثل الزر
+    var pressed by remember { mutableStateOf(false) }
+    val press by animateFloatAsState(if (pressed) 0.95f else 1f, spring(0.6f, 900f), label = "press")
 
     val cur by rememberUpdatedState(top)
     val isExp by rememberUpdatedState(expanded)
     fun buzz() { if (P.haptics.v) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
 
-    AnimatedContent(
-        targetState = face,
+    tr.AnimatedContent(
         modifier = Modifier
-            .islandBg(shape, glass, glow)
+            .graphicsLayer { scaleX = press; scaleY = press }
+            .islandBg(shape, glass, glow, bgTint)
             // أي لمسة = نأجل التصغير التلقائي
             .pointerInput(Unit) {
                 awaitPointerEventScope {
@@ -211,6 +261,11 @@ private fun IslandBody(st: IslandState, top: Act?, expanded: Boolean, latest: Ma
             }
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onPress = {
+                        if (cur != null) pressed = true
+                        tryAwaitRelease()
+                        pressed = false
+                    },
                     onTap = {
                         val a = cur ?: return@detectTapGestures
                         if (a.kind == Kind.PREVIEW) return@detectTapGestures
@@ -239,12 +294,12 @@ private fun IslandBody(st: IslandState, top: Act?, expanded: Boolean, latest: Ma
                 ) { change, dy -> total += dy; change.consume() }
             },
         transitionSpec = {
-            (fadeIn(tween(220, delayMillis = 80)) + scaleIn(tween(240, delayMillis = 80), initialScale = 0.92f))
-                .togetherWith(fadeOut(tween(90)))
-                .using(SizeTransform(clip = true) { _, _ -> spring<IntSize>(0.78f, stiff) })
+            // الشكل يكبر أول، والمحتوى يبان بعده بلحظة
+            (fadeIn(tween(200, delayMillis = 100)) + scaleIn(tween(280, delayMillis = 80), initialScale = 0.88f))
+                .togetherWith(fadeOut(tween(70)) + scaleOut(tween(110), targetScale = 0.92f))
+                .using(SizeTransform(clip = true) { _, _ -> spring<IntSize>(damp, stiff) })
         },
         contentAlignment = Alignment.TopCenter,
-        label = "island",
     ) { f ->
         val a = latest[f.key]
         when {
@@ -255,16 +310,36 @@ private fun IslandBody(st: IslandState, top: Act?, expanded: Boolean, latest: Ma
     }
 }
 
-private fun Modifier.islandBg(shape: Shape, glass: Boolean, glow: Color): Modifier {
+private fun Modifier.islandBg(shape: Shape, glass: Boolean, glow: Color, tint: Color): Modifier {
     var m = this.clip(shape)
     m = if (glass) m.background(Brush.verticalGradient(listOf(Color(0xF22A2C34), Color(0xF7111216))))
     else m.background(Color.Black)
+    if (tint.alpha > 0.01f) m = m.background(Brush.verticalGradient(listOf(Color.Transparent, tint)))
     m = when {
         glow.alpha > 0.02f -> m.border(1.dp, Brush.verticalGradient(listOf(glow, glow.copy(alpha = glow.alpha * 0.3f))), shape)
         glass -> m.border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.06f))), shape)
         else -> m
     }
     return m
+}
+
+/** صورة الغلاف: ساكنة أو تدور مثل الأسطوانة */
+@Composable
+private fun Art(bmp: Bitmap, size: Dp, corner: Dp, playing: Boolean) {
+    PrefRev.current
+    val spin = P.mediaArtSpin.v
+    val rot = remember { Animatable(0f) }
+    LaunchedEffect(spin && playing) {
+        if (spin && playing) while (true) {
+            rot.snapTo(rot.value % 360f)
+            rot.animateTo(rot.value + 360f, tween(9000, easing = LinearEasing))
+        } else if (!spin) rot.snapTo(0f)
+    }
+    Image(
+        bmp.asImageBitmap(), null, contentScale = ContentScale.Crop,
+        modifier = Modifier.size(size).graphicsLayer { rotationZ = rot.value }
+            .clip(if (spin) CircleShape else RoundedCornerShape(corner)),
+    )
 }
 
 // ───────────── الألوان والأيقونات ─────────────
@@ -361,10 +436,12 @@ private fun Compact(a: Act, g: Geo) {
 private fun Lead(a: Act, size: Dp) {
     val icon = a.icon
     val photoKinds = a.kind == Kind.MEDIA || a.kind == Kind.NOTIF || a.kind == Kind.PROGRESS || a.kind == Kind.ONGOING
-    if (icon != null && photoKinds) {
+    if (icon != null && a.kind == Kind.MEDIA) {
+        Art(icon, size, size * 0.28f, a.playing)
+    } else if (icon != null && photoKinds) {
         Image(
             bitmap = icon.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop,
-            modifier = Modifier.size(size).clip(if (a.kind == Kind.MEDIA) RoundedCornerShape(size * 0.28f) else CircleShape),
+            modifier = Modifier.size(size).clip(CircleShape),
         )
     } else {
         Icon(glyph(a), null, tint = tint(a), modifier = Modifier.size(size))
@@ -474,8 +551,7 @@ private fun MediaFull(a: Act, st: IslandState) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         val icon = a.icon
         if (icon != null) {
-            Image(icon.asImageBitmap(), null, contentScale = ContentScale.Crop,
-                modifier = Modifier.size(58.dp).clip(RoundedCornerShape(15.dp)))
+            Art(icon, 58.dp, 15.dp, a.playing)
         } else {
             Box(Modifier.size(58.dp).clip(RoundedCornerShape(15.dp)).background(c.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.MusicNote, null, tint = c, modifier = Modifier.size(30.dp))

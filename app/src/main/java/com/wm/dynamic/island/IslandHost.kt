@@ -88,7 +88,7 @@ class IslandHost(private val ctx: Context, private val type: Int) {
         val frame = TouchFrame(ctx) { state.expanded = false }
         val compose = ComposeView(ctx).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent { IslandView(state) { t -> setTouchable(t) } }
+            setContent { IslandView(state) { w, h, t -> setWindow(w, h, t) } }
         }
         frame.addView(compose)
         frame.setViewTreeLifecycleOwner(owner)
@@ -121,9 +121,13 @@ class IslandHost(private val ctx: Context, private val type: Int) {
         relayout()
     }
 
-    private fun setTouchable(t: Boolean) {
-        if (touchable == t) return
-        touchable = t
+    private var winW = 1
+    private var winH = 1
+
+    /** الواجهة تحدد مقاس النافذة (كبيرة وقت الحركة، مضبوطة وقت السكون) */
+    private fun setWindow(w: Int, h: Int, t: Boolean) {
+        if (w == winW && h == winH && t == touchable) return
+        winW = w.coerceAtLeast(1); winH = h.coerceAtLeast(1); touchable = t
         relayout()
     }
 
@@ -142,8 +146,8 @@ class IslandHost(private val ctx: Context, private val type: Int) {
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
         if (!touchable) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         return WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            winW,
+            winH,
             type, flags, PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
