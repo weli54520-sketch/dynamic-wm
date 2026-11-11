@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dynamic WM</string>
+    <string name="acc_desc">Dynamic WM يرسم الجزيرة الديناميكية فوق شريط الحالة ويستقبل لمساتك عليها. ما يقرأ محتوى الشاشة، يعرف بس اسم التطبيق المفتوح عشان ما يكرر إشعاراته.\n\nDynamic WM draws the dynamic island above the status bar. It does not read screen content.</string>
+</resources>
