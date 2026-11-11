@@ -516,7 +516,7 @@ private fun Bubble(a: Act, g: Geo) {
     val H = g.compactH()
     val glass = P.style.v == "glass"
     Box(
-        Modifier.size(H.dp).islandBg(CircleShape, glass, Color.Transparent)
+        Modifier.size(H.dp).islandBg(CircleShape, glass, Color.Transparent, Color.Transparent)
             .pointerInput(a.key) { detectTapGestures(onTap = { a.controls?.open?.invoke() }) },
         contentAlignment = Alignment.Center,
     ) { Lead(a, (H * 0.6f).dp) }
