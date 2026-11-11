@@ -1,21 +1,21 @@
 package com.wm.dynamic.island
 
-import android.os.SystemClock
 import android.graphics.Bitmap
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Rect
+import android.graphics.Shader
+import android.os.Build
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Transition
-import androidx.compose.animation.core.animateDp
-import androidx.compose.animation.core.updateTransition
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -28,21 +28,23 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -81,6 +83,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -89,32 +93,38 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -126,7 +136,11 @@ import com.wm.dynamic.core.isAr
 import com.wm.dynamic.core.t
 import com.wm.dynamic.ui.Plex
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /** يخلي الأجزاء تتحدث لما تتغير الإعدادات */
@@ -139,12 +153,31 @@ private val Gray = Color(0xFFA1A1AA)
 private fun ts(size: Float, weight: FontWeight = FontWeight.Normal, color: Color = Color.White) =
     TextStyle(fontFamily = Plex, fontSize = size.sp, fontWeight = weight, color = color)
 
+/** وش تبي الجزيرة من النوافذ: ارتفاع نافذة الرسم (px) ومكان اللمس (px) */
+data class IslandReq(val drawH: Int, val touch: Rect?, val watchOutside: Boolean)
+
+/** أرقام النابض حسب نمط الحركة */
+private fun springOf(motion: String): Pair<Float, Float> = when (motion) {
+    "smooth" -> 1f to 210f
+    "fast" -> 0.84f to 650f
+    else -> 0.72f to 280f // iOS: ارتداد خفيف
+}
+
+/**
+ * الجزيرة كلها.
+ * النافذة ما يتغير مقاسها أبداً وقت الحركة (هذا سبب الاهتزاز القديم).
+ * الشكل يترسم بالقلم (Canvas) بأرقام متحركة بنابض واحد: العرض، الطول، المكان، الزوايا.
+ * المحتوى فوقه بمقاس الشكل نفسه، ويطلع بعد ما يتمدد الشكل.
+ */
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -> Unit) {
+fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
     val rev by Prefs.rev.collectAsState()
     val acts by Hub.list.collectAsState()
     val g = st.geo
     val dens = LocalDensity.current
+    val d = dens.density
+    val haptic = LocalHapticFeedback.current
 
     // نحفظ آخر نسخة من كل نشاط عشان حركة الرجوع تلقى شي ترسمه
     val latest = remember { HashMap<String, Act>() }
@@ -155,10 +188,13 @@ fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -
     val first = if (off) null else acts.firstOrNull()
     val picked = if (off) null else acts.firstOrNull { it.key == st.selected }
     val top = if (first != null && (first.until > 0 || first.priority >= Pri.CALL_ON)) first else picked ?: first
-    val second = if (off || !P.secondBubble.v) null else acts.firstOrNull { it.key != top?.key && it.kind != Kind.PREVIEW }
-    val keepIdle = P.idle.v == "pill"
-    // التطبيقات الشغالة اللي تقدر تختار بينها من المكبرة
+    val maxActs = P.maxActs.v.coerceIn(1, 3)
+    val others = if (off || top == null) emptyList()
+    else acts.filter { it.key != top.key && it.kind != Kind.PREVIEW }.take(maxActs - 1)
     val picks = if (off) emptyList() else acts.filter { it.until == 0L && it.kind != Kind.PREVIEW }
+    val keepIdle = P.idle.v == "pill"
+    val appear = P.appear.v
+    val black = P.style.v != "glass"
 
     val autoExp = top != null && (top.autoExpand || top.kind == Kind.NOTIF || top.kind == Kind.GREETING || top.kind == Kind.CALL_IN)
     LaunchedEffect(top?.key) {
@@ -169,199 +205,295 @@ fun IslandView(st: IslandState, onWindow: (w: Int, h: Int, touchable: Boolean) -
     // ترجع صغيرة لحالها بعد شوي لو ما لمستها
     LaunchedEffect(expanded, top?.key, st.touchTick) {
         if (expanded && P.autoCollapse.v && top?.kind != Kind.CALL_IN && top?.kind != Kind.NOTIF) {
-            delay(6000); st.expanded = false
+            delay(7000); st.expanded = false
         }
     }
 
     val face = Face(if (top == null) 0 else if (expanded) 2 else 1, top?.key ?: "")
-    val tr = updateTransition(face, label = "island")
+    val hidden = face.mode == 0 && !keepIdle
 
-    // الظهور والاختفاء: تطلع من الكاميرا وترجع تدخل فيها
-    val alpha = remember { Animatable(0f) }
-    val wantVisible = !off && (top != null || keepIdle)
-    LaunchedEffect(wantVisible, off) {
+    // ───── الأهداف (وين لازم يوصل الشكل) ─────
+    val H = g.compactH()
+    val seed = g.seed()
+    var content by remember { mutableStateOf(IntSize.Zero) }
+    val cx = g.centerX() * d
+    val tW: Float
+    val tH: Float
+    val tTop: Float
+    when {
+        face.mode != 0 || keepIdle -> { tW = content.width.toFloat(); tH = content.height.toFloat(); tTop = g.top() * d }
+        appear == "drop" -> { tW = g.compactW() * d; tH = H * d; tTop = -(H + 12f) * d }
+        appear == "fade" -> { tW = g.compactW() * d; tH = H * d; tTop = g.top() * d }
+        else -> { tW = seed * d; tH = seed * d; tTop = (g.top() + (H - seed) / 2f) * d }
+    }
+    val tCorner = if (face.mode == 2) 40f * d else minOf(tW, tH) / 2f
+
+    // ───── نابض واحد للعرض والطول والمكان والزوايا ─────
+    val (damp, stiff) = springOf(P.motion.v)
+    val aw = remember { Animatable(tW) }
+    val ah = remember { Animatable(tH) }
+    val aTop = remember { Animatable(tTop) }
+    val aCorner = remember { Animatable(tCorner) }
+    LaunchedEffect(tW, tH, tTop, tCorner, damp, stiff) {
+        if (tW <= 0f || tH <= 0f) return@LaunchedEffect
+        val grow = tW * tH >= aw.value * ah.value
+        // الكبر بارتداد، والرجوع أهدأ شوي (مثل iOS)
+        val sp = spring<Float>(if (grow) damp else minOf(1f, damp + 0.14f), stiff, 0.5f)
+        launch { aw.animateTo(tW, sp) }
+        launch { ah.animateTo(tH, sp) }
+        launch { aTop.animateTo(tTop, sp) }
+        launch { aCorner.animateTo(tCorner, sp) }
+    }
+    val moving = aw.isRunning || ah.isRunning || aTop.isRunning
+
+    // الظهور: تبان على طول (تطلع من الكاميرا أو من فوق)، والتلاشي بشفافية
+    val alpha = remember { Animatable(if (hidden) 0f else 1f) }
+    LaunchedEffect(hidden, appear, off) {
         when {
             off -> alpha.snapTo(0f)
-            // تبدأ بحجم الكاميرا وبلونها، فتبان كأنها طالعة منها
-            wantVisible -> alpha.snapTo(1f)
-            // تنكمش لين حجم الكاميرا، وبعدين تذوب فيها
-            else -> { delay(260); alpha.animateTo(0f, tween(120)) }
+            !hidden -> if (appear == "fade") alpha.animateTo(1f, tween(220)) else alpha.snapTo(1f)
+            appear == "fade" -> alpha.animateTo(0f, tween(240))
+            else -> {
+                // ننتظر الشكل يرجع للكاميرا، وبعدين يختفي
+                delay(48)
+                snapshotFlow { aw.isRunning || ah.isRunning || aTop.isRunning }.first { !it }
+                alpha.snapTo(0f)
+            }
         }
     }
-    val visible by remember { derivedStateOf { alpha.value > 0.01f } }
 
-    // النافذة: كبيرة وقت الحركة (عشان ما تتعدل كل إطار = سلاسة)، وبمقاس الجزيرة بالضبط وقت السكون
-    val H = g.compactH()
-    var measured by remember { mutableStateOf(IntSize.Zero) }
-    val running = tr.isRunning || alpha.isRunning
-    val bigW = with(dens) { (max(g.expandedW(), g.compactW() + 2 * (H + 6f)) + 8f).dp.roundToPx() }
-    val bigH = with(dens) { 320.dp.roundToPx() }
-    SideEffect {
-        when {
-            !visible && !wantVisible -> onWindow(1, 1, false)
-            running || measured.width <= 1 -> onWindow(bigW, bigH, true)
-            else -> onWindow(measured.width, measured.height, true)
+    // ───── الدوائر الجانبية (نشاط ثاني وثالث) ─────
+    val B = H * d
+    val bGap = 7f * d
+    val slotR = rememberSlot(others.getOrNull(0), !expanded && top != null, damp, stiff)
+    val slotL = rememberSlot(others.getOrNull(1), !expanded && top != null, damp, stiff)
+    val bTop = g.top() * d
+    fun bubbleX(right: Boolean, sep: Float): Float {
+        val edge = if (right) cx + aw.value / 2f else cx - aw.value / 2f
+        val inside = if (right) edge - B / 2f else edge + B / 2f
+        val dist = (bGap + B) * sep
+        return if (right) inside + dist else inside - dist
+    }
+
+    // ───── النوافذ: وين اللمس ─────
+    val pad = 4f * d
+    val touch: Rect? = if (hidden || off || alpha.value <= 0f && hidden) null else {
+        val r = Rect(
+            (cx - tW / 2f - pad).roundToInt(), (tTop - pad).roundToInt(),
+            (cx + tW / 2f + pad).roundToInt(), (tTop + tH + pad).roundToInt(),
+        )
+        if (!expanded) {
+            if (slotR.act != null) r.right = (cx + tW / 2f + bGap + B + pad).roundToInt()
+            if (slotL.act != null) r.left = (cx - tW / 2f - bGap - B - pad).roundToInt()
         }
+        r
+    }
+    val busy = moving || slotR.sep.isRunning || slotL.sep.isRunning || alpha.isRunning
+    val drawH = when {
+        alpha.value <= 0f && hidden && !busy -> 1
+        busy || expanded -> fullH
+        else -> ((g.top() + H + 10f) * d).roundToInt().coerceAtMost(fullH)
+    }
+    SideEffect { onReq(IslandReq(drawH, touch, expanded)) }
+
+    // ───── تأثير الزئبق (يشتغل بس وقت الانفصال والالتحام) ─────
+    val goo = remember(d) { gooEffect(d) }
+    val gooOn = black && P.goo.v && goo != null && (slotR.sep.isRunning || slotL.sep.isRunning)
+
+    // ───── اللون واللمعة ─────
+    val glowTarget = if (P.glow.v && top != null && top.kind != Kind.PREVIEW) tint(top).copy(alpha = 0.7f) else Color.Transparent
+    val glow by animateColorAsState(glowTarget, tween(300), label = "glow")
+    val tintTarget = if (expanded && top != null && top.kind == Kind.MEDIA && P.mediaTintBg.v && top.accent != 0)
+        Color(top.accent).copy(alpha = 0.32f) else Color.Transparent
+    val bgTint by animateColorAsState(tintTarget, tween(450), label = "tint")
+
+    // ───── اللمس ─────
+    val cur by rememberUpdatedState(top)
+    val isExp by rememberUpdatedState(expanded)
+    val pickList by rememberUpdatedState(picks)
+    fun buzz() { if (P.haptics.v) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+    fun switchBy(dir: Int) {
+        val list = pickList
+        val a = cur ?: return
+        if (list.size < 2) return
+        val i = list.indexOfFirst { it.key == a.key }.coerceAtLeast(0)
+        val n = list.size
+        buzz(); st.keepOpen = isExp; st.selected = list[(i + dir + n) % n].key
     }
 
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Ltr,
-        LocalDensity provides Density(dens.density, dens.fontScale.coerceAtMost(1.1f)),
+        LocalDensity provides Density(d, dens.fontScale.coerceAtMost(1.1f)),
         PrefRev provides rev,
     ) {
-        Box(
-            // لمسة على الفراغ اللي حول الجزيرة = تصغير
-            Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { st.expanded = false } },
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            Row(
-                Modifier.onSizeChanged { measured = it }.graphicsLayer { this.alpha = alpha.value },
-                verticalAlignment = Alignment.Top,
+        Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha.value }) {
+            // 1) الشكل (أسود أو زجاج) بالقلم
+            Canvas(Modifier.fillMaxSize().graphicsLayer { renderEffect = if (gooOn) goo else null }) {
+                val brush = if (black) Brush.verticalGradient(listOf(Color.Black, Color.Black))
+                else Brush.verticalGradient(listOf(Color(0xF22A2C34), Color(0xF7111216)))
+                val w = aw.value.coerceAtLeast(0f); val h = ah.value.coerceAtLeast(0f)
+                val c = aCorner.value.coerceIn(0f, minOf(w, h) / 2f)
+                drawRoundRect(brush, Offset(cx - w / 2f, aTop.value), Size(w, h), CornerRadius(c, c))
+                listOf(slotR to true, slotL to false).forEach { (s, right) ->
+                    val sep = s.sep.value
+                    if (s.act != null && sep > 0.001f) {
+                        val x = bubbleX(right, sep)
+                        drawCircle(brush, B / 2f, Offset(x, bTop + B / 2f))
+                    }
+                }
+            }
+
+            // 2) المحتوى بمقاس الشكل بالضبط
+            Box(
+                Modifier
+                    .offset { IntOffset((cx - aw.value / 2f).roundToInt(), aTop.value.roundToInt()) }
+                    .layout { m, _ ->
+                        val w = aw.value.roundToInt().coerceAtLeast(0)
+                        val h = ah.value.roundToInt().coerceAtLeast(0)
+                        val p = m.measure(Constraints.fixed(w, h))
+                        layout(w, h) { p.place(0, 0) }
+                    }
+                    .clip(RoundedCornerShape(aCorner.value.coerceAtLeast(0f)))
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, bgTint)))
+                    .then(
+                        if (glow.alpha > 0.02f) Modifier.border(1.dp, Brush.verticalGradient(listOf(glow, glow.copy(alpha = glow.alpha * 0.3f))), RoundedCornerShape(aCorner.value.coerceAtLeast(0f)))
+                        else if (!black) Modifier.border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.06f))), RoundedCornerShape(aCorner.value.coerceAtLeast(0f)))
+                        else Modifier
+                    )
+                    // أي لمسة = نأجل التصغير التلقائي
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) { awaitPointerEvent(PointerEventPass.Initial); st.touchTick++ }
+                        }
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                val a = cur ?: return@detectTapGestures
+                                if (a.kind == Kind.PREVIEW) return@detectTapGestures
+                                when {
+                                    isExp -> { a.controls?.open?.invoke(); st.expanded = false }
+                                    P.tapAction.v == "open" -> { buzz(); a.controls?.open?.invoke() }
+                                    else -> { buzz(); st.expanded = true }
+                                }
+                            },
+                            onLongPress = {
+                                val a = cur ?: return@detectTapGestures
+                                if (a.kind == Kind.PREVIEW) return@detectTapGestures
+                                buzz()
+                                if (!isExp && P.tapAction.v == "open") st.expanded = true
+                                else { a.controls?.open?.invoke(); st.expanded = false }
+                            },
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        var dx = 0f; var dy = 0f
+                        detectDragGestures(
+                            onDragStart = { dx = 0f; dy = 0f },
+                            onDragEnd = {
+                                val a = cur ?: return@detectDragGestures
+                                if (abs(dx) > abs(dy)) {
+                                    // يمين/يسار = التطبيق اللي بعده
+                                    if (abs(dx) > 50f) switchBy(if (dx < 0) 1 else -1)
+                                } else if (dy < -40f) {
+                                    if (isExp) st.expanded = false else Hub.dismiss(a.key)
+                                } else if (dy > 40f && !isExp && a.kind != Kind.PREVIEW) {
+                                    buzz(); st.expanded = true
+                                }
+                            },
+                        ) { change, drag -> dx += drag.x; dy += drag.y; change.consume() }
+                    },
             ) {
-                val bubble = second != null && !expanded && top != null
-                if (bubble) Spacer(Modifier.width(H.dp + 6.dp))
-                IslandBody(st, tr, top, expanded, latest, g, picks, keepIdle)
-                if (bubble && second != null) {
-                    Spacer(Modifier.width(6.dp))
-                    Bubble(second, g, st)
+                // المحتوى بمقاسه الطبيعي (يتقص بالشكل لين يكبر)
+                Box(Modifier.wrapContentSize(Alignment.TopCenter, unbounded = true).onSizeChanged { content = it }) {
+                    AnimatedContent(
+                        targetState = face,
+                        transitionSpec = {
+                            // الشكل يتمدد أول، والمحتوى يبان بعده
+                            (fadeIn(tween(200, delayMillis = 90)) + scaleIn(tween(260, delayMillis = 60), initialScale = 0.9f))
+                                .togetherWith(fadeOut(tween(80)) + scaleOut(tween(120), targetScale = 0.94f))
+                                .using(SizeTransform(clip = false) { _, _ -> snap() })
+                        },
+                        contentAlignment = Alignment.TopCenter,
+                        label = "face",
+                    ) { f ->
+                        val a = latest[f.key]
+                        when {
+                            f.mode == 0 || a == null -> IdleBox(g, keepIdle, appear)
+                            f.mode == 1 -> Compact(a, g)
+                            else -> Expanded(a, g, st, pickList)
+                        }
+                    }
+                }
+            }
+
+            // 3) محتوى الدوائر الجانبية
+            listOf(slotR to true, slotL to false).forEach { (s, right) ->
+                val a = s.act
+                val sep = s.sep.value
+                if (a != null && sep > 0.001f) {
+                    val x = bubbleX(right, sep)
+                    Box(
+                        Modifier
+                            .offset { IntOffset((x - B / 2f).roundToInt(), bTop.roundToInt()) }
+                            .size((B / d).dp)
+                            .graphicsLayer { this.alpha = ((sep - 0.4f) / 0.6f).coerceIn(0f, 1f) }
+                            .clip(CircleShape)
+                            .pointerInput(a.key) {
+                                detectTapGestures(
+                                    onTap = { buzz(); st.keepOpen = false; st.selected = a.key },
+                                    onLongPress = { buzz(); a.controls?.open?.invoke() },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Lead(a, (B / d * 0.62f).dp) }
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
+/** خانة دائرة جانبية: تحفظ آخر نشاط عشان تقدر تتحرك وهي راجعة */
+private class Slot(val sep: Animatable<Float, AnimationVector1D>) { var act by mutableStateOf<Act?>(null) }
+
 @Composable
-private fun IslandBody(
-    st: IslandState, tr: Transition<Face>, top: Act?, expanded: Boolean, latest: Map<String, Act>, g: Geo,
-    picks: List<Act>, keepIdle: Boolean,
-) {
-    PrefRev.current
-    val H = g.compactH()
-    val seed = g.seed()
-    val glass = P.style.v == "glass"
-    // نابض مثل iOS: سريع مع ارتداد خفيف
-    val stiff = when (P.speed.v) { 0 -> 320f; 2 -> 1100f; else -> 620f }
-    val damp = 0.78f
-    val corner by tr.animateDp(transitionSpec = { spring(damp, stiff) }, label = "corner") { f ->
-        when {
-            f.mode == 2 -> 38.dp
-            f.mode == 0 && !keepIdle -> (seed / 2f).dp
-            else -> (H / 2f).dp
-        }
+private fun rememberSlot(a: Act?, show: Boolean, damp: Float, stiff: Float): Slot {
+    val slot = remember { Slot(Animatable(0f)) }
+    if (a != null) slot.act = a
+    val want = a != null && show
+    LaunchedEffect(want, a?.key) {
+        slot.sep.animateTo(if (want) 1f else 0f, spring(if (want) damp else minOf(1f, damp + 0.14f), stiff * 0.8f, 0.002f))
+        if (!want && a == null) slot.act = null
     }
-    // البذرة (حجم الكاميرا) تكون بنص الجزيرة بالضبط، فوق الكاميرا
-    val seedPad by tr.animateDp(transitionSpec = { spring(damp, stiff) }, label = "seedPad") { f ->
-        if (f.mode == 0 && !keepIdle) ((H - seed) / 2f).coerceAtLeast(0f).dp else 0.dp
-    }
-    val pickList by rememberUpdatedState(picks)
-    val glowTarget = if (P.glow.v && top != null && top.kind != Kind.PREVIEW) tint(top).copy(alpha = 0.7f) else Color.Transparent
-    val glow by animateColorAsState(glowTarget, tween(300), label = "glow")
-    // خلفية تاخذ لون الغلاف أو الفيديو وهي مكبرة
-    val tintTarget = if (expanded && top != null && top.kind == Kind.MEDIA && P.mediaTintBg.v && top.accent != 0)
-        Color(top.accent).copy(alpha = 0.32f) else Color.Transparent
-    val bgTint by animateColorAsState(tintTarget, tween(450), label = "tint")
-    val shape = RoundedCornerShape(corner)
-    val haptic = LocalHapticFeedback.current
-
-    // ضغطة: تنضغط شوي مثل الزر
-    var pressed by remember { mutableStateOf(false) }
-    val press by animateFloatAsState(if (pressed) 0.95f else 1f, spring(0.6f, 900f), label = "press")
-
-    val cur by rememberUpdatedState(top)
-    val isExp by rememberUpdatedState(expanded)
-    fun buzz() { if (P.haptics.v) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
-
-    tr.AnimatedContent(
-        modifier = Modifier
-            .graphicsLayer { scaleX = press; scaleY = press }
-            .padding(top = seedPad)
-            .islandBg(shape, glass, glow, bgTint)
-            // أي لمسة = نأجل التصغير التلقائي
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) { awaitPointerEvent(PointerEventPass.Initial); st.touchTick++ }
-                }
-            }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        if (cur != null) pressed = true
-                        tryAwaitRelease()
-                        pressed = false
-                    },
-                    onTap = {
-                        val a = cur ?: return@detectTapGestures
-                        if (a.kind == Kind.PREVIEW) return@detectTapGestures
-                        if (isExp) {
-                            a.controls?.open?.invoke(); st.expanded = false
-                        } else { buzz(); st.expanded = true }
-                    },
-                    onLongPress = {
-                        val a = cur ?: return@detectTapGestures
-                        buzz(); a.controls?.open?.invoke(); st.expanded = false
-                    },
-                )
-            }
-            .pointerInput(Unit) {
-                var total = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { total = 0f },
-                    onDragEnd = {
-                        val a = cur
-                        if (a != null && total < -40f) {
-                            if (isExp) st.expanded = false else Hub.dismiss(a.key)
-                        } else if (a != null && total > 40f && !isExp && a.kind != Kind.PREVIEW) {
-                            buzz(); st.expanded = true
-                        }
-                    },
-                ) { change, dy -> total += dy; change.consume() }
-            }
-            .pointerInput(Unit) {
-                // سحب يمين/يسار وهي مكبرة = التطبيق اللي بعده
-                var dx = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { dx = 0f },
-                    onDragEnd = {
-                        val list = pickList
-                        val a = cur
-                        if (isExp && a != null && list.size > 1 && kotlin.math.abs(dx) > 60f) {
-                            val i = list.indexOfFirst { it.key == a.key }
-                            val n = list.size
-                            val j = if (dx < 0) (i + 1).mod(n) else (i - 1 + n).mod(n)
-                            buzz(); st.keepOpen = true; st.selected = list[j].key
-                        }
-                    },
-                ) { change, d -> dx += d; change.consume() }
-            },
-        transitionSpec = {
-            // الشكل يكبر أول، والمحتوى يبان بعده بلحظة
-            (fadeIn(tween(200, delayMillis = 100)) + scaleIn(tween(280, delayMillis = 80), initialScale = 0.88f))
-                .togetherWith(fadeOut(tween(70)) + scaleOut(tween(110), targetScale = 0.92f))
-                .using(SizeTransform(clip = true) { _, _ -> spring<IntSize>(damp, stiff) })
-        },
-        contentAlignment = Alignment.TopCenter,
-    ) { f ->
-        val a = latest[f.key]
-        when {
-            f.mode == 0 || a == null -> Idle(g, keepIdle)
-            f.mode == 1 -> Compact(a, g)
-            else -> Expanded(a, g, st, pickList)
-        }
-    }
+    return slot
 }
 
-private fun Modifier.islandBg(shape: Shape, glass: Boolean, glow: Color, tint: Color): Modifier {
-    var m = this.clip(shape)
-    m = if (glass) m.background(Brush.verticalGradient(listOf(Color(0xF22A2C34), Color(0xF7111216))))
-    else m.background(Color.Black)
-    if (tint.alpha > 0.01f) m = m.background(Brush.verticalGradient(listOf(Color.Transparent, tint)))
-    m = when {
-        glow.alpha > 0.02f -> m.border(1.dp, Brush.verticalGradient(listOf(glow, glow.copy(alpha = glow.alpha * 0.3f))), shape)
-        glass -> m.border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.06f))), shape)
-        else -> m
+/** تأثير الزئبق: تضبيب + حد للشفافية = الأشكال القريبة تلتحم */
+private fun gooEffect(d: Float): RenderEffect? {
+    if (Build.VERSION.SDK_INT < 31) return null
+    return try {
+        val r = 6f * d
+        val m = ColorMatrix(floatArrayOf(
+            1f, 0f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f, 0f,
+            0f, 0f, 1f, 0f, 0f,
+            0f, 0f, 0f, 28f, -3400f,
+        ))
+        android.graphics.RenderEffect.createChainEffect(
+            android.graphics.RenderEffect.createColorFilterEffect(ColorMatrixColorFilter(m)),
+            android.graphics.RenderEffect.createBlurEffect(r, r, Shader.TileMode.DECAL),
+        ).asComposeRenderEffect()
+    } catch (_: Throwable) { null }
+}
+
+@Composable
+private fun IdleBox(g: Geo, pill: Boolean, appear: String) {
+    val H = g.compactH()
+    when {
+        pill -> Box(Modifier.size(max(H, g.gap() + H * 0.9f).dp, H.dp))
+        appear == "camera" -> { val s = g.seed(); Box(Modifier.size(s.dp, s.dp)) }
+        else -> Box(Modifier.size(g.compactW().dp, H.dp))
     }
-    return m
 }
 
 /** صورة الغلاف: ساكنة أو تدور مثل الأسطوانة */
@@ -450,13 +582,6 @@ private fun mediaPos(a: Act): Long {
 }
 
 // ───────────── الحالات ─────────────
-
-@Composable
-private fun Idle(g: Geo, pill: Boolean) {
-    val H = g.compactH()
-    if (pill) Box(Modifier.size(max(H, g.gap() + H * 0.9f).dp, H.dp))
-    else { val s = g.seed(); Box(Modifier.size(s.dp, s.dp)) }
-}
 
 @Composable
 private fun Compact(a: Act, g: Geo) {
@@ -553,23 +678,6 @@ private fun LevelBar(p: Float, color: Color, modifier: Modifier) {
     Box(modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f))) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(p.coerceIn(0f, 1f)).clip(RoundedCornerShape(50)).background(color))
     }
-}
-
-@Composable
-private fun Bubble(a: Act, g: Geo, st: IslandState) {
-    val H = g.compactH()
-    val glass = P.style.v == "glass"
-    Box(
-        Modifier.size(H.dp).islandBg(CircleShape, glass, Color.Transparent, Color.Transparent)
-            // ضغطة = تصير هي الأساسية، ضغطة طويلة = تفتح تطبيقها
-            .pointerInput(a.key) {
-                detectTapGestures(
-                    onTap = { st.selected = a.key },
-                    onLongPress = { a.controls?.open?.invoke() },
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) { Lead(a, (H * 0.6f).dp) }
 }
 
 // ───────────── الجزيرة المكبرة ─────────────

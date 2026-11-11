@@ -42,8 +42,9 @@ class OverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Prefs.init(this)
-        goForeground()
-        if (!shouldRun(this)) { stopSelf(); return START_NOT_STICKY }
+        // أندرويد ممكن يرفض التشغيل بالخلفية: بدل ما يطيح التطبيق نوقف الخدمة بهدوء
+        val fg = try { goForeground(); true } catch (_: Exception) { false }
+        if (!fg || !shouldRun(this)) { stopSelf(); return START_NOT_STICKY }
         if (host == null) {
             try {
                 val disp = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
@@ -54,7 +55,7 @@ class OverlayService : Service() {
                 host = IslandHost(wc, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY).also { it.start() }
             } catch (_: Exception) { stopSelf() }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun goForeground() {

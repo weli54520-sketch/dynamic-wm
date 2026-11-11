@@ -2,6 +2,8 @@ package com.wm.dynamic.ui
 
 import android.content.Context
 import android.os.BatteryManager
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import com.wm.dynamic.core.Accents
 import com.wm.dynamic.core.t
@@ -70,5 +72,20 @@ object Demo {
     fun bluetooth() {
         Hub.flash(Act("demo_bt", Kind.BT, PRI, title = "Galaxy Buds", text = t("متصل", "Connected"),
             accent = Accents.BLUE), 3_000)
+    }
+
+    /** 3 أنشطة بنفس الوقت عشان تجرب الدوائر والتبديل (20 ثانية) */
+    fun multi() {
+        val now = SystemClock.elapsedRealtime()
+        Hub.put(Act("demo_m1", Kind.MEDIA, Pri.MEDIA, title = t("أغنية تجريبية", "Demo song"), text = "Dynamic WM",
+            app = "Music", accent = Accents.current, playing = true, position = 30_000, duration = 200_000, posAt = now,
+            controls = Controls(playPause = {}, next = {}, prev = {})))
+        Hub.put(Act("demo_m2", Kind.TIMER, Pri.TIMER, title = t("مؤقت", "Timer"), app = t("الساعة", "Clock"),
+            chrono = System.currentTimeMillis() + 3 * 60_000, countDown = true))
+        Hub.put(Act("demo_m3", Kind.PROGRESS, Pri.PROGRESS, title = t("تحميل ملف", "Downloading"), text = "video.mp4",
+            app = t("تجربة", "Demo"), progress = 0.4f))
+        Handler(Looper.getMainLooper()).postDelayed({
+            Hub.remove("demo_m1"); Hub.remove("demo_m2"); Hub.remove("demo_m3")
+        }, 20_000)
     }
 }

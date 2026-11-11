@@ -115,6 +115,16 @@ object P {
     /** 0 بطيئة ، 1 عادية ، 2 سريعة */
     val speed = IntPref("speed", 1)
     val haptics = BoolPref("haptics", true)
+    /** نمط الحركة: ios = نابض بارتداد خفيف ، smooth = ناعم بدون ارتداد ، fast = سريع */
+    val motion = StrPref("motion", "ios")
+    /** طريقة الظهور: camera = تتمدد من الكاميرا ، drop = تنزل من فوق ، fade = تتلاشى */
+    val appear = StrPref("appear", "camera")
+    /** كم نشاط يبان بنفس الوقت (1 - 3) */
+    val maxActs = IntPref("max_acts", 2)
+    /** الضغطة الوحدة: expand = تكبر ، open = تفتح التطبيق */
+    val tapAction = StrPref("tap_action", "expand")
+    /** الدائرة الثانية تنفصل وتلتحم مثل الزئبق */
+    val goo = BoolPref("goo", true)
     /** hidden = مخفية ، pill = حبة صغيرة حول الكاميرا */
     val idle = StrPref("idle", "hidden")
     val secondBubble = BoolPref("second_bubble", true)

@@ -2,6 +2,7 @@ package com.wm.dynamic
 
 import android.app.Application
 import android.content.SharedPreferences
+import com.wm.dynamic.core.CrashLog
 import com.wm.dynamic.core.Prefs
 import com.wm.dynamic.island.Hub
 
@@ -11,6 +12,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
         Prefs.init(this)
         Prefs.sp.registerOnSharedPreferenceChangeListener(onPref)
     }

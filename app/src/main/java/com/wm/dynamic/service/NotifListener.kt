@@ -76,9 +76,11 @@ class NotifListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        Hub.remove("n:" + sbn.key)
-        Hub.remove("nb:" + sbn.key)
-        shown.remove(sbn.key)
+        try {
+            Hub.remove("n:" + sbn.key)
+            Hub.remove("nb:" + sbn.key)
+            shown.remove(sbn.key)
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
@@ -235,6 +237,10 @@ class NotifListener : NotificationListenerService() {
     }
 
     private fun sessionsChanged(list: List<MediaController>?) {
+        try { sessionsChangedInner(list) } catch (_: Exception) {}
+    }
+
+    private fun sessionsChangedInner(list: List<MediaController>?) {
         val now = list.orEmpty()
         val tokens = now.map { it.sessionToken }.toSet()
         controllers.keys.filter { it !in tokens }.forEach { tk ->
@@ -264,6 +270,10 @@ class NotifListener : NotificationListenerService() {
     }
 
     private fun updateMedia() {
+        try { updateMediaInner() } catch (_: Exception) {}
+    }
+
+    private fun updateMediaInner() {
         main.removeCallbacks(mediaTick)
         val list = controllers.values.map { it.first }.filter { it.metadata != null && (isPlaying(it) || isPaused(it)) }
         // تطبيق واحد ممكن يكون عنده أكثر من جلسة: ناخذ الشغالة أول

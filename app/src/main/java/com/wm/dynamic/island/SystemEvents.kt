@@ -30,7 +30,7 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
         override fun onReceive(c: Context, i: Intent) {
             // الأحداث الثابتة (sticky) توصل أول ما نسجّل، نتجاهلها
             if (isInitialStickyBroadcast) return
-            handle(i)
+            try { handle(i) } catch (_: Exception) {}
         }
     }
 
@@ -61,7 +61,7 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
             addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
             addAction(VOLUME_CHANGED)
         }
-        ContextCompat.registerReceiver(ctx, receiver, f, ContextCompat.RECEIVER_EXPORTED)
+        try { ContextCompat.registerReceiver(ctx, receiver, f, ContextCompat.RECEIVER_EXPORTED) } catch (_: Exception) {}
         try { ctx.getSystemService(CameraManager::class.java).registerTorchCallback(torchCb, main) } catch (_: Exception) {}
     }
 

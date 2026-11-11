@@ -32,6 +32,10 @@ import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import com.wm.dynamic.core.CrashLog
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DoNotDisturbOn
 import androidx.compose.material.icons.rounded.Download
@@ -215,11 +219,12 @@ fun HomeScreen(act: MainActivity, wide: Boolean) {
                 Pill(t("تحميل", "Download")) { go { Demo.download() } }
                 Pill(t("إشعار", "Notification")) { go { Demo.notif() } }
                 Pill(t("بلوتوث", "Bluetooth")) { go { Demo.bluetooth() } }
+                Pill(t("3 تطبيقات", "3 apps")) { go { Demo.multi() } }
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                t("ضغطة: تكبير · ضغطة طويلة: تفتح التطبيق · سحب لفوق: إخفاء · سحب لتحت: تكبير",
-                    "Tap: expand · Long press: open app · Swipe up: hide · Swipe down: expand"),
+                t("ضغطة: تكبير · ضغطة طويلة: تفتح التطبيق · سحب لفوق: إخفاء · سحب لتحت: تكبير · يمين ويسار: تبديل",
+                    "Tap: expand · Long press: open app · Swipe up: hide · Swipe down: expand · Sideways: switch"),
                 style = ts(12.5f, color = Faint),
             )
         }
@@ -366,8 +371,25 @@ fun LookScreen(wide: Boolean) {
 
         SectionTitle(t("الحركة", "Motion"))
         GlassCard {
-            Segmented(listOf(t("هادية", "Calm"), t("عادية", "Normal"), t("سريعة", "Snappy")), P.speed.v.coerceIn(0, 2)) { P.speed.v = it }
+            val motions = listOf("ios", "smooth", "fast")
+            Text(t("نمط الحركة", "Motion style"), style = ts(14.5f, FontWeight.Medium))
+            Spacer(Modifier.height(8.dp))
+            Segmented(listOf(t("آيفون", "iPhone"), t("ناعم", "Smooth"), t("سريع", "Fast")), motions.indexOf(P.motion.v).coerceAtLeast(0)) {
+                P.motion.v = motions[it]
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(t("آيفون: ارتداد خفيف. ناعم: بدون ارتداد. سريع: حركة خاطفة.",
+                "iPhone: light bounce. Smooth: no bounce. Fast: snappy."), style = ts(12.5f, color = Faint))
+            Spacer(Modifier.height(12.dp))
+            val appears = listOf("camera", "drop", "fade")
+            Text(t("طريقة الظهور", "How it appears"), style = ts(14.5f, FontWeight.Medium))
+            Spacer(Modifier.height(8.dp))
+            Segmented(listOf(t("من الكاميرا", "From camera"), t("من فوق", "Drop down"), t("تلاشي", "Fade")), appears.indexOf(P.appear.v).coerceAtLeast(0)) {
+                P.appear.v = appears[it]
+            }
             Spacer(Modifier.height(6.dp))
+            ToggleRow(null, Color.White, t("التحام مثل الزئبق", "Liquid merge"),
+                t("الدائرة الثانية تنفصل وتلتحم مع الجزيرة (الستايل الأسود)", "The second circle splits and merges (black style)"), P.goo)
             ToggleRow(null, Color.White, t("اهتزاز خفيف عند اللمس", "Haptic feedback"), pref = P.haptics)
         }
 
@@ -379,8 +401,23 @@ fun LookScreen(wide: Boolean) {
                 P.idle.v = if (it == 1) "pill" else "hidden"
             }
             Spacer(Modifier.height(6.dp))
-            ToggleRow(null, Color.White, t("فقاعة للنشاط الثاني", "Bubble for a second activity"),
-                t("إذا اشتغل نشاطين، الثاني يطلع دائرة صغيرة", "Shows a second activity as a small circle"), P.secondBubble)
+            Spacer(Modifier.height(10.dp))
+            Text(t("كم نشاط يبان بنفس الوقت", "Activities shown at once"), style = ts(14.5f, FontWeight.Medium))
+            Spacer(Modifier.height(8.dp))
+            Segmented(listOf("1", "2", "3"), P.maxActs.v.coerceIn(1, 3) - 1) { P.maxActs.v = it + 1 }
+            Spacer(Modifier.height(4.dp))
+            Text(t("الزيادة تطلع دوائر جنب الجزيرة. اضغط الدائرة عشان تبدّل.",
+                "Extra ones show as circles. Tap a circle to switch."), style = ts(12.5f, color = Faint))
+            Spacer(Modifier.height(12.dp))
+            Text(t("الضغطة الوحدة على الجزيرة", "Single tap on the island"), style = ts(14.5f, FontWeight.Medium))
+            Spacer(Modifier.height(8.dp))
+            Segmented(listOf(t("تكبر", "Expand"), t("تفتح التطبيق", "Open app")), if (P.tapAction.v == "open") 1 else 0) {
+                P.tapAction.v = if (it == 1) "open" else "expand"
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(t("الضغطة الطويلة تسوي العكس. والسحب يمين ويسار يبدّل بين التطبيقات.",
+                "Long press does the other. Swipe sideways to switch apps."), style = ts(12.5f, color = Faint))
+            Spacer(Modifier.height(6.dp))
             ToggleRow(null, Color.White, t("إخفاء بالوضع الأفقي", "Hide in landscape"), pref = P.hideLandscape)
             ToggleRow(null, Color.White, t("تصغير تلقائي", "Auto collapse"), t("ترجع صغيرة بعد ثواني", "Shrinks back after a few seconds"), P.autoCollapse)
         }
@@ -487,6 +524,8 @@ fun MoreScreen(wide: Boolean) {
             }
         }
 
+        CrashCard()
+
         SectionTitle(t("عن التطبيق", "About"))
         GlassCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -497,6 +536,34 @@ fun MoreScreen(wide: Boolean) {
                     Text(t("جزيرة ديناميكية بتصميمك وبدون اشتراك", "Your own dynamic island, no subscription"), style = ts(12.5f, color = Faint))
                 }
             }
+        }
+    }
+}
+
+/** آخر خطأ وقّف التطبيق: تنسخه وترسله */
+@Composable
+private fun CrashCard() {
+    var log by remember { mutableStateOf(CrashLog.read()) }
+    val text = log ?: return
+    val clip = LocalClipboardManager.current
+    val ctx = LocalContext.current
+    SectionTitle(t("آخر خطأ", "Last crash"))
+    GlassCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Rounded.BugReport, Color(0xFFFF453A))
+            Spacer(Modifier.width(14.dp))
+            Text(t("التطبيق توقف مرة. انسخ الخطأ وأرسله لـ Claude.", "The app crashed once. Copy and send it to Claude."),
+                style = ts(13.5f, color = Soft), modifier = Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(text.take(700), style = ts(11f, color = Faint), maxLines = 10)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Pill(t("نسخ", "Copy"), filled = true) {
+                clip.setText(AnnotatedString(text))
+                Toast.makeText(ctx, t("انتسخ", "Copied"), Toast.LENGTH_SHORT).show()
+            }
+            Pill(t("مسح", "Clear")) { CrashLog.clear(); log = null }
         }
     }
 }

@@ -21,13 +21,14 @@ object Hub {
     /** التطبيق المفتوح الحين (من خدمة إمكانية الوصول) */
     @Volatile var foregroundPkg: String? = null
 
-    private val expire = Runnable { publish() }
+    private val expire = Runnable { try { publish() } catch (_: Exception) {} }
 
     /** أنشطة سحبها المستخدم لفوق: تختفي لين يتغير عنوانها */
     private val snoozed = HashMap<String, String>()
 
     private fun onMain(block: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) block() else main.post(block)
+        val safe = { try { block() } catch (_: Exception) {} }
+        if (Looper.myLooper() == Looper.getMainLooper()) safe() else main.post(safe)
     }
 
     fun put(a: Act) = onMain {
