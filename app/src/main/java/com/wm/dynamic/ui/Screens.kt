@@ -70,6 +70,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wm.dynamic.BuildConfig
@@ -236,6 +239,12 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
                 Sub { ToggleRow(null, cPink, t("حركة الموجة", "Wave animation"), pref = P.mediaWave) }
                 Sub { ToggleRow(null, cPink, t("لون من غلاف الأغنية", "Color from artwork"), pref = P.mediaArtColor) }
                 Sub { ToggleRow(null, cPink, t("أخفيها لما يكون تطبيق الموسيقى مفتوح", "Hide while the music app is open"), pref = P.mediaHideOpen) }
+                Sub {
+                    SliderRow(t("تختفي بعد الإيقاف", "Hide after pause"), P.mediaKeep.v.toFloat(), 0f..60f,
+                        if (P.mediaKeep.v == 0) t("فوراً", "Instantly") else t("${P.mediaKeep.v} ث", "${P.mediaKeep.v}s")) {
+                        P.mediaKeep.v = it.roundToInt()
+                    }
+                }
             }
             ToggleRow(Icons.Rounded.Call, cGreen, t("المكالمات", "Calls"), t("اسم المتصل ووقت المكالمة", "Caller name and call time"), P.call)
             Sub {
@@ -285,9 +294,20 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
 fun LookScreen(wide: Boolean) {
     prefRev()
     // معاينة: تبان الجزيرة وأنت تعدّل
-    DisposableEffect(Unit) {
-        Hub.put(Act("preview", Kind.PREVIEW, Pri.PREVIEW, title = "Dynamic WM"))
-        onDispose { Hub.remove("preview") }
+    // بس وأنت فاتح الشاشة: لو طلعت من التطبيق تختفي
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val show = { Hub.put(Act("preview", Kind.PREVIEW, Pri.PREVIEW, title = "Dynamic WM")) }
+        val obs = LifecycleEventObserver { _, e ->
+            when (e) {
+                Lifecycle.Event.ON_RESUME -> show()
+                Lifecycle.Event.ON_PAUSE -> Hub.remove("preview")
+                else -> Unit
+            }
+        }
+        owner.lifecycle.addObserver(obs)
+        if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) show()
+        onDispose { owner.lifecycle.removeObserver(obs); Hub.remove("preview") }
     }
     val cur = if (LocalConfiguration.current.smallestScreenWidthDp >= 600) "inner" else "outer"
     var scr by remember(cur) { mutableStateOf(cur) }

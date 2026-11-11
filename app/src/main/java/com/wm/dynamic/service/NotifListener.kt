@@ -239,13 +239,18 @@ class NotifListener : NotificationListenerService() {
                 val cb = object : MediaController.Callback() {
                     override fun onPlaybackStateChanged(state: PlaybackState?) = updateMedia()
                     override fun onMetadataChanged(metadata: MediaMetadata?) = updateMedia()
-                    override fun onSessionDestroyed() = updateMedia()
+                    override fun onSessionDestroyed() {
+                        controllers.remove(c.sessionToken)?.let { (cc, cb2) -> try { cc.unregisterCallback(cb2) } catch (_: Exception) {} }
+                        updateMedia()
+                    }
                 }
                 try { c.registerCallback(cb, main); controllers[c.sessionToken] = c to cb } catch (_: Exception) {}
             }
         }
         updateMedia()
     }
+
+    private fun isPaused(c: MediaController): Boolean = c.playbackState?.state == PlaybackState.STATE_PAUSED
 
     private fun isPlaying(c: MediaController): Boolean {
         val s = c.playbackState?.state
@@ -256,7 +261,7 @@ class NotifListener : NotificationListenerService() {
         main.removeCallbacks(mediaTick)
         val list = controllers.values.map { it.first }
         val playing = list.firstOrNull { isPlaying(it) && it.metadata != null }
-        val c = playing ?: list.firstOrNull { it.metadata != null }
+        val c = playing ?: list.firstOrNull { it.metadata != null && isPaused(it) }
         val md = c?.metadata
         if (c == null || md == null) { Hub.remove("media"); return }
         val isPlaying = playing != null
@@ -264,8 +269,9 @@ class NotifListener : NotificationListenerService() {
         if (isPlaying) pausedSince = 0L else {
             val nowT = SystemClock.elapsedRealtime()
             if (pausedSince == 0L) pausedSince = nowT
-            if (nowT - pausedSince > PAUSE_KEEP) { Hub.remove("media"); return }
-            main.postDelayed(mediaTick, PAUSE_KEEP + 500 - (nowT - pausedSince))
+            val keep = P.mediaKeep.v.coerceIn(0, 300) * 1000L
+            if (nowT - pausedSince >= keep) { Hub.remove("media"); return }
+            main.postDelayed(mediaTick, keep + 300 - (nowT - pausedSince))
         }
 
         val title = md.getString(MediaMetadata.METADATA_KEY_TITLE) ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE) ?: ""
@@ -326,7 +332,6 @@ class NotifListener : NotificationListenerService() {
 
     companion object {
         @Volatile var instance: NotifListener? = null
-        private const val PAUSE_KEEP = 60_000L
         private val ANSWER = listOf("answer", "accept", "رد", "إجابة", "اجابة", "قبول")
         private val DECLINE = listOf("decline", "reject", "رفض")
         private val HANGUP = listOf("hang up", "end call", "إنهاء", "انهاء")

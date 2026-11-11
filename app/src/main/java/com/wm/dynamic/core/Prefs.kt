@@ -77,6 +77,8 @@ object P {
     val mediaWave = BoolPref("f_media_wave", true)
     val mediaArtColor = BoolPref("f_media_art", true)
     val mediaHideOpen = BoolPref("f_media_hide_open", false)
+    /** كم ثانية تبقى الموسيقى بعد الإيقاف المؤقت (0 = تختفي فوراً) */
+    val mediaKeep = IntPref("f_media_keep", 5)
     val call = BoolPref("f_call", true)
     val callControls = BoolPref("f_call_ctrl", true)
     val timer = BoolPref("f_timer", true)
