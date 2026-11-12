@@ -242,6 +242,18 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
             ToggleRow(Icons.Rounded.MusicNote, cPink, t("الموسيقى", "Music"), t("الأغنية والغلاف والتحكم", "Song, artwork and controls"), P.media)
             if (P.media.v) {
                 Sub { ToggleRow(null, cPink, t("حركة الموجة", "Wave animation"), pref = P.mediaWave) }
+                if (P.mediaWave.v) Sub {
+                    Column {
+                        val styles = listOf("bars", "wave", "dots", "mirror")
+                        Text(t("شكل الموجة", "Wave style"), style = ts(14f, FontWeight.Medium))
+                        Spacer(Modifier.height(8.dp))
+                        Segmented(listOf(t("أعمدة", "Bars"), t("موجة", "Wave"), t("نقاط", "Dots"), t("طيف", "Mirror")),
+                            styles.indexOf(P.waveStyle.v).coerceAtLeast(0)) { P.waveStyle.v = styles[it] }
+                        Spacer(Modifier.height(4.dp))
+                        Text(t("تتحرك مع التشغيل ومستوى الصوت", "Moves with playback and volume"), style = ts(12.5f, color = Faint))
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
                 Sub { ToggleRow(null, cPink, t("لون من غلاف الأغنية", "Color from artwork"), pref = P.mediaArtColor) }
                 Sub { ToggleRow(null, cPink, t("الكبسولة المكبرة بلون الغلاف", "Expanded island in artwork color"), t("بدل الأسود", "Instead of black"), P.mediaTintBg) }
                 Sub { ToggleRow(null, cPink, t("الغلاف يدور", "Spinning artwork"), t("مثل الأسطوانة وقت التشغيل", "Like a record while playing"), P.mediaArtSpin) }

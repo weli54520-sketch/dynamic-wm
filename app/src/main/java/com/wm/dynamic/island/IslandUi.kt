@@ -88,8 +88,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -108,6 +108,7 @@ import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -132,6 +133,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wm.dynamic.core.Accents
+import com.wm.dynamic.core.MediaVol
 import com.wm.dynamic.core.P
 import com.wm.dynamic.core.Prefs
 import com.wm.dynamic.core.Saver
@@ -141,9 +143,11 @@ import com.wm.dynamic.ui.Plex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.random.Random
 
 /** يخلي الأجزاء تتحدث لما تتغير الإعدادات */
@@ -710,22 +714,98 @@ private fun Trail(a: Act, H: Float, maxW: Float) {
     }
 }
 
+/**
+ * موجة الصوت. أشكالها: أعمدة، موجة، نقاط، طيف ([P.waveStyle]).
+ * تتحرك بنعومة (موجات متداخلة بدل قفزات عشوائية)، وتكبر وتصغر مع مستوى الصوت،
+ * وتهدأ لما يوقف المقطع. بدون ميكروفون: كلها من حالة التشغيل ومستوى الصوت.
+ */
 @Composable
 private fun Wave(color: Color, live: Boolean, h: Dp) {
+    PrefRev.current
     // وقت توفير البطارية الموجة تثبت
     val playing = live && !LocalSaver.current
-    val bars = 4
-    val targets = remember { mutableStateListOf(0.4f, 0.75f, 0.5f, 0.85f) }
+    val style = P.waveStyle.v
+    val vol by MediaVol.level.collectAsState()
+    // الطاقة: تكبر وقت التشغيل وتهدأ وقت الإيقاف
+    val energy by animateFloatAsState(if (playing) 1f else 0f, tween(500), label = "energy")
+    val clock = remember { mutableFloatStateOf(0f) }
+    val beat = remember { mutableFloatStateOf(0.75f) }
     LaunchedEffect(playing) {
-        if (playing) while (true) {
-            for (i in 0 until bars) targets[i] = 0.25f + Random.nextFloat() * 0.75f
-            delay(170)
-        } else for (i in 0 until bars) targets[i] = 0.3f
+        if (!playing) return@LaunchedEffect
+        var last = SystemClock.uptimeMillis()
+        var target = 0.75f
+        var nextBeat = 0L
+        while (true) {
+            delay(33) // 30 صورة بالثانية تكفي، وأوفر للبطارية
+            val now = SystemClock.uptimeMillis()
+            clock.floatValue = (clock.floatValue + (now - last) / 1000f) % 3600f
+            last = now
+            // نبضة: تتغير كل شوي عشان تحس بإيقاع
+            if (now >= nextBeat) { target = 0.55f + Random.nextFloat() * 0.45f; nextBeat = now + 340 + Random.nextLong(220) }
+            beat.floatValue += (target - beat.floatValue) * 0.22f
+        }
     }
-    Row(Modifier.height(h), horizontalArrangement = Arrangement.spacedBy(h * 0.14f), verticalAlignment = Alignment.CenterVertically) {
-        for (i in 0 until bars) {
-            val v by animateFloatAsState(targets[i], tween(170), label = "bar")
-            Box(Modifier.width(h * 0.16f).fillMaxHeight(v).clip(RoundedCornerShape(50)).background(color))
+    val amp = (0.35f + 0.65f * vol) * energy
+    Canvas(Modifier.width(h * 1.25f).height(h)) {
+        val t = clock.floatValue
+        val a = amp * beat.floatValue
+        val W = size.width
+        val H = size.height
+        /** حركة ناعمة لكل عنصر: موجتين متداخلتين (0 - 1) */
+        fun lvl(i: Int): Float {
+            val x = 0.5f + 0.32f * sin(t * (5.1f + i * 1.3f) + i * 1.7f) + 0.18f * sin(t * (8.3f - i * 0.9f) + i * 0.6f)
+            return x.coerceIn(0f, 1f)
+        }
+        when (style) {
+            "wave" -> {
+                // موجة متموجة: خطين، الثاني خفيف وراه
+                for (k in 0..1) {
+                    val path = Path()
+                    val steps = 24
+                    for (j in 0..steps) {
+                        val fx = j / steps.toFloat()
+                        val env = sin(fx * PI.toFloat()) // تصغر عند الأطراف
+                        val y = H / 2f + sin(fx * 2f * PI.toFloat() * 1.4f + t * (6f + k * 1.5f) + k * 1.2f) * H * 0.38f * a * env
+                        if (j == 0) path.moveTo(fx * W, y) else path.lineTo(fx * W, y)
+                    }
+                    drawPath(path, color.copy(alpha = if (k == 0) 1f else 0.4f),
+                        style = Stroke(width = H * 0.12f, cap = StrokeCap.Round))
+                }
+            }
+            "dots" -> {
+                // نقاط تنبض وتطلع وتنزل شوي
+                val n = 4
+                val gap = W / n
+                for (i in 0 until n) {
+                    val v = lvl(i)
+                    val r = H * (0.09f + 0.11f * v * a)
+                    val y = H / 2f - (v - 0.5f) * H * 0.35f * a
+                    drawCircle(color.copy(alpha = 0.55f + 0.45f * v), r, Offset(gap * (i + 0.5f), y))
+                }
+            }
+            "mirror" -> {
+                // طيف متماثل: أعمدة من النص لفوق وتحت، الوسط أطول
+                val prof = floatArrayOf(0.55f, 0.8f, 1f, 0.8f, 0.55f)
+                val n = prof.size
+                val bw = W / (n * 1.6f)
+                val step = (W - bw) / (n - 1)
+                for (i in 0 until n) {
+                    val hh = H * (0.14f + 0.86f * lvl(i) * a * prof[i])
+                    val x = bw / 2f + step * i
+                    drawLine(color, Offset(x, H / 2f - hh / 2f), Offset(x, H / 2f + hh / 2f), bw, StrokeCap.Round)
+                }
+            }
+            else -> {
+                // أعمدة ناعمة (الافتراضي)
+                val n = 4
+                val bw = W / (n * 1.75f)
+                val step = (W - bw) / (n - 1)
+                for (i in 0 until n) {
+                    val hh = H * (0.22f + 0.78f * lvl(i) * a)
+                    val x = bw / 2f + step * i
+                    drawLine(color, Offset(x, (H + hh) / 2f - bw / 2f), Offset(x, (H - hh) / 2f + bw / 2f), bw, StrokeCap.Round)
+                }
+            }
         }
     }
 }

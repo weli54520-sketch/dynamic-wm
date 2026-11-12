@@ -75,6 +75,8 @@ object P {
     // الأنشطة
     val media = BoolPref("f_media", true)
     val mediaWave = BoolPref("f_media_wave", true)
+    /** شكل الموجة: bars أعمدة ، wave موجة ، dots نقاط ، mirror طيف */
+    val waveStyle = StrPref("wave_style", "bars")
     val mediaArtColor = BoolPref("f_media_art", true)
     val mediaHideOpen = BoolPref("f_media_hide_open", true)
     /** كم ثانية تبقى الموسيقى بعد الإيقاف المؤقت (0 = تختفي فوراً) */

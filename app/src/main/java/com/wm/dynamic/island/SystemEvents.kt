@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import com.wm.dynamic.core.Accents
+import com.wm.dynamic.core.MediaVol
 import com.wm.dynamic.core.P
 import com.wm.dynamic.core.Saver
 import com.wm.dynamic.core.t
@@ -101,6 +102,10 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
         try { ContextCompat.registerReceiver(ctx, receiver, f, ContextCompat.RECEIVER_EXPORTED) } catch (_: Exception) {}
         try { ctx.getSystemService(CameraManager::class.java).registerTorchCallback(torchCb, main) } catch (_: Exception) {}
         readSaver()
+        try {
+            val am = ctx.getSystemService(AudioManager::class.java)
+            MediaVol.set(am.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1))
+        } catch (_: Exception) {}
     }
 
     fun stop() {
@@ -186,6 +191,7 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
                 val am = ctx.getSystemService(AudioManager::class.java)
                 val v = i.getIntExtra("android.media.EXTRA_VOLUME_STREAM_VALUE", am.getStreamVolume(stream))
                 val max = am.getStreamMaxVolume(stream).coerceAtLeast(1)
+                if (stream == AudioManager.STREAM_MUSIC) MediaVol.set(v.toFloat() / max)
                 Hub.flash(Act("ev_volume", Kind.VOLUME, Pri.EVENT + 1,
                     title = if (stream == AudioManager.STREAM_MUSIC) t("الوسائط", "Media") else t("الرنين", "Ringer"),
                     level = v * 100 / max, accent = Accents.current), 1600)

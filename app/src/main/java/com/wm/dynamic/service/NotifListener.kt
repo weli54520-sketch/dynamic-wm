@@ -45,6 +45,8 @@ class NotifListener : NotificationListenerService() {
     private class ArtCache(var id: Int = -1, var bmp: Bitmap? = null, var color: Int = 0, var bg: Int = 0)
     private val pausedSince = HashMap<String, Long>()
     private val arts = HashMap<String, ArtCache>()
+    /** لون شعار كل تطبيق (للفيديو اللي ما له صورة). -1 = يتحسب الحين */
+    private val iconBg = HashMap<String, Int>()
     /** مفاتيح الموسيقى المعروضة الحين (media:<الحزمة>) */
     private val mediaKeys = HashSet<String>()
 
@@ -318,7 +320,7 @@ class NotifListener : NotificationListenerService() {
         val art = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-        val cache = prepareArt(pkg, art)
+        val cache = prepareArt(pkg, art, "$title\u0001$artist")
 
         val st = c.playbackState
         val tc = c.transportControls
@@ -335,7 +337,7 @@ class NotifListener : NotificationListenerService() {
             key, Kind.MEDIA, if (playing) Pri.MEDIA else Pri.MEDIA_PAUSED,
             title = title, text = artist, app = Apps.label(this, pkg), pkg = pkg,
             icon = cache.bmp ?: Apps.icon(this, pkg), accent = if (cache.bmp != null) cache.color else 0,
-            bg = if (cache.bmp != null) cache.bg else 0,
+            bg = if (cache.bmp != null) cache.bg else appColor(pkg),
             playing = playing, position = st?.position ?: 0L,
             duration = md.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0L),
             posAt = st?.lastPositionUpdateTime ?: 0L,
@@ -344,11 +346,15 @@ class NotifListener : NotificationListenerService() {
         )
     }
 
-    /** نصغّر صورة الغلاف ونطلع لونها (مرة وحدة لكل صورة، ولكل تطبيق لحاله) */
-    private fun prepareArt(pkg: String, art: Bitmap?): ArtCache {
+    /**
+     * نصغّر صورة الغلاف ونطلع لونها: مرة وحدة لكل أغنية/فيديو، ولكل تطبيق لحاله.
+     * التطبيقات ترسل الصورة كنسخة جديدة كل مرة، فنعرف إنها نفسها من العنوان وعينة من بكسلاتها
+     * (مو من النسخة)، وإلا الحساب يتكرر بدون نهاية واللون ما يوصل.
+     */
+    private fun prepareArt(pkg: String, art: Bitmap?, name: String): ArtCache {
         val cache = arts.getOrPut(pkg) { ArtCache() }
         if (art == null) { cache.id = -1; cache.bmp = null; cache.color = 0; cache.bg = 0; return cache }
-        val id = System.identityHashCode(art) * 31 + art.generationId
+        val id = name.hashCode() * 31 + sample(art)
         if (id == cache.id) return cache
         cache.id = id
         cache.bmp = try {
@@ -365,21 +371,50 @@ class NotifListener : NotificationListenerService() {
             try {
                 val p = Palette.from(src).maximumColorCount(16).generate()
                 col = p.getVibrantColor(p.getLightVibrantColor(p.getDominantColor(0)))
-                val dom = p.getDominantColor(0)
-                if (dom != 0) back = deep(dom)
+                back = bgFrom(p)
             } catch (_: Exception) {}
             main.post { if (cache.id == id) { cache.color = col; cache.bg = back; updateMedia() } }
         }
         return cache
     }
 
+    /** بصمة خفيفة للصورة: مقاسها و16 بكسل منها */
+    private fun sample(b: Bitmap): Int {
+        var h = b.width * 31 + b.height
+        try {
+            for (i in 1..4) for (j in 1..4) {
+                h = h * 31 + b.getPixel(b.width * i / 5, b.height * j / 5)
+            }
+        } catch (_: Exception) {}
+        return h
+    }
+
+    /** لون شعار التطبيق (لو الفيديو ما له صورة). يتحسب مرة وحدة لكل تطبيق */
+    private fun appColor(pkg: String): Int {
+        iconBg[pkg]?.let { return if (it == -1) 0 else it }
+        iconBg[pkg] = -1
+        val icon = Apps.icon(this, pkg) ?: return 0
+        bg.execute {
+            val c = try { bgFrom(Palette.from(icon).maximumColorCount(12).generate()) } catch (_: Exception) { 0 }
+            main.post { iconBg[pkg] = c; updateMedia() }
+        }
+        return 0
+    }
+
     companion object {
-        /** لون غامق من لون الغلاف: يبان لونه والكتابة البيضاء تنقرى */
+        /** لون الخلفية من الصورة: نفضّل اللون الحي (مو الغالب، لأن الغالب بالفيديو غالباً أسود) */
+        private fun bgFrom(p: Palette): Int {
+            val c = p.vibrantSwatch?.rgb ?: p.darkVibrantSwatch?.rgb ?: p.mutedSwatch?.rgb
+                ?: p.dominantSwatch?.rgb ?: return 0
+            return deep(c)
+        }
+
+        /** نغمّق اللون لدرجة يبان فيها لونه والكتابة البيضاء تنقرى */
         private fun deep(c: Int): Int {
             val hsv = FloatArray(3)
             android.graphics.Color.colorToHSV(c, hsv)
-            hsv[1] = (hsv[1] * 1.1f).coerceAtMost(0.85f)
-            hsv[2] = hsv[2].coerceIn(0.20f, 0.36f)
+            hsv[1] = (hsv[1] * 1.15f).coerceAtMost(0.85f)
+            hsv[2] = hsv[2].coerceIn(0.32f, 0.48f)
             return android.graphics.Color.HSVToColor(hsv)
         }
 
