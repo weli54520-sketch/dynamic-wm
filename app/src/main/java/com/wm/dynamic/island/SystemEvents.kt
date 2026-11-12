@@ -6,15 +6,18 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import com.wm.dynamic.core.Accents
 import com.wm.dynamic.core.P
+import com.wm.dynamic.core.Saver
 import com.wm.dynamic.core.t
 
 /**
@@ -37,11 +40,43 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
     private val torchCb = object : CameraManager.TorchCallback() {
         override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
             if (enabled) torchOn.add(cameraId) else torchOn.remove(cameraId)
-            if (torchOn.isNotEmpty()) {
-                Hub.put(Act("ev_torch", Kind.TORCH, Pri.TORCH, title = t("الكشاف", "Flashlight"),
-                    text = t("مشغّل", "On"), accent = Accents.YELLOW))
-            } else Hub.remove("ev_torch")
+            val id = torchOn.firstOrNull()
+            if (id != null) Hub.put(torchAct(id, -1)) else Hub.remove("ev_torch")
         }
+
+        override fun onTorchStrengthLevelChanged(cameraId: String, newStrengthLevel: Int) {
+            if (cameraId in torchOn) Hub.put(torchAct(cameraId, newStrengthLevel))
+        }
+    }
+
+    /** نشاط الكشاف: مع شدة الضوء لو الجوال يسمح (أندرويد 13+) وزر إطفاء */
+    private fun torchAct(id: String, known: Int): Act {
+        val cm = ctx.getSystemService(CameraManager::class.java)
+        var max = 1
+        var lv = known
+        if (Build.VERSION.SDK_INT >= 33) try {
+            max = cm.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL) ?: 1
+            if (lv < 1) lv = cm.getTorchStrengthLevel(id)
+        } catch (_: Exception) {}
+        val canDim = Build.VERSION.SDK_INT >= 33 && max > 1
+        return Act(
+            "ev_torch", Kind.TORCH, Pri.TORCH, title = t("الكشاف", "Flashlight"),
+            text = if (canDim && lv > 0) "${lv * 100 / max}%" else t("مشغّل", "On"),
+            accent = Accents.YELLOW, level = lv, levelMax = if (canDim) max else 0,
+            controls = Controls(
+                setLevel = if (canDim) ({ v: Int ->
+                    try { if (Build.VERSION.SDK_INT >= 33) cm.turnOnTorchWithStrengthLevel(id, v.coerceIn(1, max)) } catch (_: Exception) {}
+                }) else null,
+                off = { try { cm.setTorchMode(id, false) } catch (_: Exception) {} },
+            ),
+        )
+    }
+
+    /** نقرأ حالة توفير الطاقة والبطارية أول ما نبدأ */
+    private fun readSaver() {
+        try { Saver.setPowerSave(ctx.getSystemService(PowerManager::class.java).isPowerSaveMode) } catch (_: Exception) {}
+        val lv = battery()
+        Saver.setLow(lv in 0..15)
     }
 
     fun start() {
@@ -54,6 +89,8 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(Intent.ACTION_BATTERY_LOW)
+            addAction(Intent.ACTION_BATTERY_OKAY)
+            addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             addAction(AudioManager.ACTION_HEADSET_PLUG)
@@ -63,6 +100,7 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
         }
         try { ContextCompat.registerReceiver(ctx, receiver, f, ContextCompat.RECEIVER_EXPORTED) } catch (_: Exception) {}
         try { ctx.getSystemService(CameraManager::class.java).registerTorchCallback(torchCb, main) } catch (_: Exception) {}
+        readSaver()
     }
 
     fun stop() {
@@ -101,7 +139,10 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
                 Hub.flash(Act("ev_unplug", Kind.UNPLUG, Pri.EVENT, title = t("تم فصل الشاحن", "Unplugged"),
                     text = if (lv >= 0) "$lv%" else "", level = lv, accent = 0xFFFFFFFF.toInt()), 2200)
             }
+            PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> readSaver()
+            Intent.ACTION_BATTERY_OKAY -> Saver.setLow(false)
             Intent.ACTION_BATTERY_LOW -> {
+                Saver.setLow(true)
                 val lv = battery()
                 Hub.flash(Act("ev_low", Kind.BATTERY_LOW, Pri.EVENT, title = t("البطارية ضعيفة", "Low battery"),
                     text = if (lv >= 0) "$lv%" else "", level = lv, accent = Accents.RED), 4500)

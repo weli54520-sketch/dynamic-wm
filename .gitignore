@@ -1,6 +1,20 @@
+# ملفات البناء
 .gradle/
 build/
 app/build/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+captures/
+
+# إعدادات محلية
 local.properties
 *.iml
 .idea/
+.DS_Store
+
+# ملفات ما تنرفع أبداً (التطبيق المبني ومفاتيح التوقيع)
+*.apk
+*.aab
+*.jks
+*.keystore

@@ -18,6 +18,12 @@ class Controls(
     val prev: (() -> Unit)? = null,
     val seek: ((Long) -> Unit)? = null,
     val open: (() -> Unit)? = null,
+    /** تغيير المستوى (مثل شدة الكشاف) */
+    val setLevel: ((Int) -> Unit)? = null,
+    /** إطفاء (مثل الكشاف) */
+    val off: (() -> Unit)? = null,
+    /** أزرار الإشعار نفسه (إيقاف المؤقت، إلغاء التحميل ...): الاسم والضغطة */
+    val actions: List<Pair<String, () -> Unit>> = emptyList(),
 )
 
 /**
@@ -34,6 +40,8 @@ data class Act(
     val pkg: String? = null,
     val icon: Bitmap? = null,
     val accent: Int = 0,
+    /** لون غامق من غلاف الأغنية (خلفية الكبسولة المكبرة) */
+    val bg: Int = 0,
     val progress: Float = -1f,
     val indeterminate: Boolean = false,
     /** وقت المؤقت/المكالمة بالمللي (System.currentTimeMillis) */
@@ -46,6 +54,8 @@ data class Act(
     val posAt: Long = 0L,
     val speed: Float = 1f,
     val level: Int = -1,
+    /** أعلى مستوى ممكن لـ [level] (0 = ما يتغير) */
+    val levelMax: Int = 0,
     val autoExpand: Boolean = false,
     val until: Long = 0L,
     val stamp: Long = 0L,

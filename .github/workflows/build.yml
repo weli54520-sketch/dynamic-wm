@@ -55,3 +55,14 @@ jobs:
           tag_name: v${{ github.run_number }}
           name: Dynamic WM 1.${{ github.run_number }}
           files: dynamic-wm.apk
+      # نخلي آخر إصدارين بس: الجديد، واللي قبله للرجوع لو صار عطل
+      - if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' |
+          while read -r tag; do
+            [ -n "$tag" ] && gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          done

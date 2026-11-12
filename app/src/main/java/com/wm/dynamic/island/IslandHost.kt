@@ -6,6 +6,7 @@ import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
@@ -41,6 +42,8 @@ class IslandState {
     var selected by mutableStateOf<String?>(null)
     /** التبديل جا من المستخدم: نخليها مكبرة */
     var keepOpen = false
+    /** شريط الحالة مخفي (فيديو أو لعبة بملء الشاشة) */
+    var fullscreen by mutableStateOf(false)
 }
 
 /** يخلي Compose يشتغل داخل نافذة من خدمة (مو من شاشة) */
@@ -111,6 +114,17 @@ class IslandHost(private val ctx: Context, private val type: Int) {
         }
         val frame = FrameLayout(ctx)
         frame.addView(cv)
+        // ملء الشاشة = شريط الحالة اختفى. نصدق الإخفاء بس لو شفناه ظاهر قبل
+        // (عشان لو الجوال ما يعطينا المعلومة، الجزيرة ما تختفي على طول)
+        var sawBar = false
+        frame.setOnApplyWindowInsetsListener { _, ins ->
+            try {
+                val vis = ins.isVisible(WindowInsets.Type.statusBars())
+                if (vis) sawBar = true
+                state.fullscreen = sawBar && !vis
+            } catch (_: Exception) {}
+            ins
+        }
         frame.setViewTreeLifecycleOwner(owner)
         frame.setViewTreeSavedStateRegistryOwner(owner)
         frame.setViewTreeViewModelStoreOwner(owner)

@@ -243,7 +243,7 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
             if (P.media.v) {
                 Sub { ToggleRow(null, cPink, t("حركة الموجة", "Wave animation"), pref = P.mediaWave) }
                 Sub { ToggleRow(null, cPink, t("لون من غلاف الأغنية", "Color from artwork"), pref = P.mediaArtColor) }
-                Sub { ToggleRow(null, cPink, t("خلفية بلون الغلاف أو الفيديو", "Background tinted by artwork"), t("وهي مكبرة", "When expanded"), P.mediaTintBg) }
+                Sub { ToggleRow(null, cPink, t("الكبسولة المكبرة بلون الغلاف", "Expanded island in artwork color"), t("بدل الأسود", "Instead of black"), P.mediaTintBg) }
                 Sub { ToggleRow(null, cPink, t("الغلاف يدور", "Spinning artwork"), t("مثل الأسطوانة وقت التشغيل", "Like a record while playing"), P.mediaArtSpin) }
                 Sub { ToggleRow(null, cPink, t("أخفيها لما يكون تطبيق الموسيقى مفتوح", "Hide while the music app is open"), pref = P.mediaHideOpen) }
                 Sub {
@@ -286,7 +286,7 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
             ToggleRow(Icons.Rounded.Bluetooth, cBlue, t("البلوتوث", "Bluetooth"), t("لما تتصل سماعة أو ساعة", "Headphones, watches..."), P.evBt)
             ToggleRow(Icons.Rounded.Headphones, cCyan, t("السماعة السلكية", "Wired headphones"), pref = P.evHeadset)
             ToggleRow(Icons.Rounded.Vibration, cOrange, t("الصامت والاهتزاز", "Silent / vibrate"), pref = P.evRinger)
-            ToggleRow(Icons.Rounded.FlashlightOn, cYellow, t("الكشاف", "Flashlight"), t("يبقى ظاهر وهو مشغّل", "Stays while it's on"), P.evTorch)
+            ToggleRow(Icons.Rounded.FlashlightOn, cYellow, t("الكشاف", "Flashlight"), t("يبقى ظاهر وهو مشغّل، وكبّره عشان تتحكم بشدته", "Stays while on; expand it to set brightness"), P.evTorch)
             ToggleRow(Icons.Rounded.DoNotDisturbOn, cPurple, t("عدم الإزعاج", "Do not disturb"), pref = P.evDnd)
             ToggleRow(Icons.Rounded.LockOpen, cGray, t("فتح القفل", "Unlock"), pref = P.evUnlock)
             ToggleRow(Icons.AutoMirrored.Rounded.VolumeUp, cBlue, t("مستوى الصوت", "Volume"), t("بدل شريط الصوت العادي", "Shows the volume level"), P.evVolume)
@@ -406,8 +406,8 @@ fun LookScreen(wide: Boolean) {
             Spacer(Modifier.height(8.dp))
             Segmented(listOf("1", "2", "3"), P.maxActs.v.coerceIn(1, 3) - 1) { P.maxActs.v = it + 1 }
             Spacer(Modifier.height(4.dp))
-            Text(t("الزيادة تطلع دوائر جنب الجزيرة. اضغط الدائرة عشان تبدّل.",
-                "Extra ones show as circles. Tap a circle to switch."), style = ts(12.5f, color = Faint))
+            Text(t("الزيادة تطلع دوائر على يسار الجزيرة. لو أكثر من وحدة تكون فوق بعض: اضغطها تنفرد، واختر اللي تبي.",
+                "Extra ones show as circles on the left. If stacked, tap to fan them out, then pick one."), style = ts(12.5f, color = Faint))
             Spacer(Modifier.height(12.dp))
             Text(t("الضغطة الوحدة على الجزيرة", "Single tap on the island"), style = ts(14.5f, FontWeight.Medium))
             Spacer(Modifier.height(8.dp))
@@ -419,6 +419,10 @@ fun LookScreen(wide: Boolean) {
                 "Long press does the other. Swipe sideways to switch apps."), style = ts(12.5f, color = Faint))
             Spacer(Modifier.height(6.dp))
             ToggleRow(null, Color.White, t("إخفاء بالوضع الأفقي", "Hide in landscape"), pref = P.hideLandscape)
+            ToggleRow(null, Color.White, t("إخفاء وقت ملء الشاشة", "Hide in full screen"),
+                t("الفيديو والألعاب. المكالمة الواردة تطلع برضو", "Videos and games. Incoming calls still show"), P.hideFullscreen)
+            ToggleRow(null, Color.White, t("توفير البطارية تلقائي", "Automatic battery saver"),
+                t("لما تشغّل توفير الطاقة أو تضعف البطارية: الموجة تثبت والحركات تخف", "With power saving or low battery: still wave, lighter motion"), P.autoSaver)
             ToggleRow(null, Color.White, t("تصغير تلقائي", "Auto collapse"), t("ترجع صغيرة بعد ثواني", "Shrinks back after a few seconds"), P.autoCollapse)
         }
 

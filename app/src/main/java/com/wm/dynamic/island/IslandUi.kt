@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CallEnd
 import androidx.compose.material.icons.rounded.DoNotDisturbOn
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.FlashlightOff
 import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.LockOpen
@@ -91,6 +92,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -132,6 +134,7 @@ import androidx.compose.ui.unit.sp
 import com.wm.dynamic.core.Accents
 import com.wm.dynamic.core.P
 import com.wm.dynamic.core.Prefs
+import com.wm.dynamic.core.Saver
 import com.wm.dynamic.core.isAr
 import com.wm.dynamic.core.t
 import com.wm.dynamic.ui.Plex
@@ -145,6 +148,12 @@ import kotlin.random.Random
 
 /** يخلي الأجزاء تتحدث لما تتغير الإعدادات */
 private val PrefRev = compositionLocalOf { 0 }
+
+/** توفير البطارية شغال: الموجة تثبت، الغلاف ما يدور، والتحديثات أقل */
+private val LocalSaver = compositionLocalOf { false }
+
+/** نفس اللون بس أغمق */
+private fun Color.dim(f: Float) = Color(red * f, green * f, blue * f, alpha)
 
 private data class Face(val mode: Int, val key: String)
 
@@ -173,15 +182,21 @@ private fun springOf(motion: String): Pair<Float, Float> = when (motion) {
 @Composable
 fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
     val rev by Prefs.rev.collectAsState()
-    val acts by Hub.list.collectAsState()
+    val all by Hub.list.collectAsState()
+    val saverRaw by Saver.on.collectAsState()
+    val saver = saverRaw && P.autoSaver.v
     val g = st.geo
     val dens = LocalDensity.current
     val d = dens.density
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+
+    // ملء الشاشة (فيديو، ألعاب): نخفيها، إلا المكالمة الواردة
+    val acts = if (st.fullscreen && P.hideFullscreen.v) all.filter { it.kind == Kind.CALL_IN } else all
 
     // نحفظ آخر نسخة من كل نشاط عشان حركة الرجوع تلقى شي ترسمه
     val latest = remember { HashMap<String, Act>() }
-    acts.forEach { latest[it.key] = it }
+    all.forEach { latest[it.key] = it }
 
     val off = rev < 0 || !st.screenOn || !P.enabled.v || (g.landscape && P.hideLandscape.v)
     // الأحداث المؤقتة والمكالمات تغطي على أي شي. غير كذا: اللي اختاره المستخدم، أو الأهم
@@ -229,7 +244,8 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
     val tCorner = if (face.mode == 2) 40f * d else minOf(tW, tH) / 2f
 
     // ───── نابض واحد للعرض والطول والمكان والزوايا ─────
-    val (damp, stiff) = springOf(P.motion.v)
+    // توفير البطارية: حركة أسرع وأقصر
+    val (damp, stiff) = springOf(if (saver) "fast" else P.motion.v)
     val aw = remember { Animatable(tW) }
     val ah = remember { Animatable(tH) }
     val aTop = remember { Animatable(tTop) }
@@ -262,18 +278,31 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
         }
     }
 
-    // ───── الدوائر الجانبية (نشاط ثاني وثالث) ─────
+    // ───── الدوائر الجانبية (على اليسار) ─────
+    // نشاط ثاني = دائرة يسار الجزيرة. نشاط ثالث = دائرة فوقها مايلة شوي.
+    // ضغطة على الدوائر المكدسة = تنفرد جنب بعض، وتختار وحدة فتلتحم مع الجزيرة.
     val B = H * d
     val bGap = 7f * d
-    val slotR = rememberSlot(others.getOrNull(0), !expanded && top != null, damp, stiff)
-    val slotL = rememberSlot(others.getOrNull(1), !expanded && top != null, damp, stiff)
+    val showBubbles = !expanded && top != null
+    val slotA = rememberSlot(others.getOrNull(0), showBubbles, damp, stiff)
+    val slotB = rememberSlot(others.getOrNull(1), showBubbles, damp, stiff)
     val bTop = g.top() * d
-    fun bubbleX(right: Boolean, sep: Float): Float {
-        val edge = if (right) cx + aw.value / 2f else cx - aw.value / 2f
-        val inside = if (right) edge - B / 2f else edge + B / 2f
-        val dist = (bGap + B) * sep
-        return if (right) inside + dist else inside - dist
-    }
+    var fan by remember { mutableStateOf(false) }
+    val canFan = showBubbles && others.size >= 2
+    LaunchedEffect(canFan) { if (!canFan) fan = false }
+    // ترجع مكدسة لحالها لو ما اخترت شي
+    LaunchedEffect(fan, st.touchTick) { if (fan) { delay(4000); fan = false } }
+    val aFan = remember { Animatable(0f) }
+    LaunchedEffect(fan, damp, stiff) { aFan.animateTo(if (fan) 1f else 0f, spring(damp, stiff * 0.9f, 0.002f)) }
+    val bubbleSc = 0.84f
+    /** مركز الدائرة الأولى */
+    fun xA(sep: Float): Float = cx - aw.value / 2f + B / 2f - (bGap + B) * sep
+    /** بُعد الدائرة الثانية عن الأولى: مكدسة (متداخلة) أو منفردة (جنبها) */
+    fun offB(f: Float): Float = B * 0.62f + (bGap + B * 0.38f) * f
+    fun xB(sep: Float, f: Float): Float = cx - aw.value / 2f + B / 2f - (bGap + B + offB(f)) * sep
+    /** الثانية نازلة شوي (مايلة) وهي مكدسة */
+    fun yB(sep: Float, f: Float): Float = bTop + B * 0.14f * (1f - f) * sep
+    fun scB(f: Float): Float = bubbleSc + (1f - bubbleSc) * f
 
     // ───── النوافذ: وين اللمس ─────
     val pad = 4f * d
@@ -282,13 +311,17 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
             (cx - tW / 2f - pad).roundToInt(), (tTop - pad).roundToInt(),
             (cx + tW / 2f + pad).roundToInt(), (tTop + tH + pad).roundToInt(),
         )
-        if (!expanded) {
-            if (slotR.act != null) r.right = (cx + tW / 2f + bGap + B + pad).roundToInt()
-            if (slotL.act != null) r.left = (cx - tW / 2f - bGap - B - pad).roundToInt()
+        if (!expanded && slotA.act != null) {
+            var left = cx - tW / 2f - bGap - B - pad
+            if (slotB.act != null) {
+                left -= offB(if (fan) 1f else 0f)
+                r.bottom = maxOf(r.bottom, (bTop + B * 1.16f + pad).roundToInt())
+            }
+            r.left = left.roundToInt()
         }
         r
     }
-    val busy = moving || slotR.sep.isRunning || slotL.sep.isRunning || alpha.isRunning
+    val busy = moving || slotA.sep.isRunning || slotB.sep.isRunning || aFan.isRunning || alpha.isRunning
     val drawH = when {
         alpha.value <= 0f && hidden && !busy -> 1
         busy || expanded -> fullH
@@ -298,20 +331,43 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
 
     // ───── تأثير الزئبق (يشتغل بس وقت الانفصال والالتحام) ─────
     val goo = remember(d) { gooEffect(d) }
-    val gooOn = black && P.goo.v && goo != null && (slotR.sep.isRunning || slotL.sep.isRunning)
+    val gooOn = black && P.goo.v && goo != null && !saver &&
+        (slotA.sep.isRunning || slotB.sep.isRunning || aFan.isRunning)
 
     // ───── اللون واللمعة ─────
     val glowTarget = if (P.glow.v && top != null && top.kind != Kind.PREVIEW) tint(top).copy(alpha = 0.7f) else Color.Transparent
     val glow by animateColorAsState(glowTarget, tween(300), label = "glow")
-    val tintTarget = if (expanded && top != null && top.kind == Kind.MEDIA && P.mediaTintBg.v && top.accent != 0)
-        Color(top.accent).copy(alpha = 0.32f) else Color.Transparent
+    // الكبسولة المكبرة بلون غلاف الأغنية
+    val tintTarget = when {
+        !expanded || top == null || top.kind != Kind.MEDIA || !P.mediaTintBg.v -> Color.Transparent
+        top.bg != 0 -> Color(top.bg)
+        top.accent != 0 -> Color(top.accent).copy(alpha = 0.32f)
+        else -> Color.Transparent
+    }
     val bgTint by animateColorAsState(tintTarget, tween(450), label = "tint")
 
     // ───── اللمس ─────
     val cur by rememberUpdatedState(top)
     val isExp by rememberUpdatedState(expanded)
     val pickList by rememberUpdatedState(picks)
+    val othersNow by rememberUpdatedState(others)
+    val showNow by rememberUpdatedState(showBubbles)
     fun buzz() { if (P.haptics.v) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+    /** ضغطة على دائرة: لو مكدسة تنفرد، وإلا تلتحم مع الجزيرة وتصير هي المعروضة */
+    fun tapBubble(s: Slot, a: Act) {
+        st.touchTick++
+        if (othersNow.size >= 2 && !fan) { buzz(); fan = true; return }
+        buzz(); fan = false
+        scope.launch {
+            s.sep.animateTo(0f, spring(minOf(1f, damp + 0.14f), stiff, 0.002f))
+            st.keepOpen = false; st.selected = a.key
+            // لو بقت نفس الدائرة (مثلاً فيه مكالمة تغطي) نرجعها
+            delay(60)
+            if (showNow && othersNow.any { it.key == s.act?.key } && s.sep.value < 0.99f && !s.sep.isRunning) {
+                s.sep.animateTo(1f, spring(damp, stiff * 0.8f, 0.002f))
+            }
+        }
+    }
     fun switchBy(dir: Int) {
         val list = pickList
         val a = cur ?: return
@@ -325,6 +381,7 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
         LocalLayoutDirection provides LayoutDirection.Ltr,
         LocalDensity provides Density(d, dens.fontScale.coerceAtMost(1.1f)),
         PrefRev provides rev,
+        LocalSaver provides saver,
     ) {
         Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha.value }) {
             // 1) الشكل (أسود أو زجاج) بالقلم
@@ -334,12 +391,13 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                 val w = aw.value.coerceAtLeast(0f); val h = ah.value.coerceAtLeast(0f)
                 val c = aCorner.value.coerceIn(0f, minOf(w, h) / 2f)
                 drawRoundRect(brush, Offset(cx - w / 2f, aTop.value), Size(w, h), CornerRadius(c, c))
-                listOf(slotR to true, slotL to false).forEach { (s, right) ->
-                    val sep = s.sep.value
-                    if (s.act != null && sep > 0.001f) {
-                        val x = bubbleX(right, sep)
-                        drawCircle(brush, B / 2f, Offset(x, bTop + B / 2f))
-                    }
+                val f = aFan.value
+                if (slotA.act != null && slotA.sep.value > 0.001f) {
+                    drawCircle(brush, B / 2f, Offset(xA(slotA.sep.value), bTop + B / 2f))
+                }
+                if (slotB.act != null && slotB.sep.value > 0.001f) {
+                    val sb = slotB.sep.value
+                    drawCircle(brush, B / 2f * scB(f), Offset(xB(sb, f), yB(sb, f) + B / 2f))
                 }
             }
 
@@ -354,7 +412,7 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                         layout(w, h) { p.place(0, 0) }
                     }
                     .clip(RoundedCornerShape(aCorner.value.coerceAtLeast(0f)))
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, bgTint)))
+                    .background(Brush.verticalGradient(listOf(bgTint, bgTint.dim(0.62f))))
                     .then(
                         if (glow.alpha > 0.02f) Modifier.border(1.dp, Brush.verticalGradient(listOf(glow, glow.copy(alpha = glow.alpha * 0.3f))), RoundedCornerShape(aCorner.value.coerceAtLeast(0f)))
                         else if (!black) Modifier.border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.06f))), RoundedCornerShape(aCorner.value.coerceAtLeast(0f)))
@@ -427,21 +485,30 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                 }
             }
 
-            // 3) محتوى الدوائر الجانبية
-            listOf(slotR to true, slotL to false).forEach { (s, right) ->
+            // 3) محتوى الدوائر الجانبية (الأولى، وبعدها الثانية فوقها)
+            listOf(slotA, slotB).forEach { s ->
                 val a = s.act
-                val sep = s.sep.value
-                if (a != null && sep > 0.001f) {
-                    val x = bubbleX(right, sep)
+                if (a != null && s.sep.value > 0.001f) {
+                    val second = s === slotB
                     Box(
                         Modifier
-                            .offset { IntOffset((x - B / 2f).roundToInt(), bTop.roundToInt()) }
+                            .offset {
+                                val sep = s.sep.value
+                                val f = aFan.value
+                                val x = if (second) xB(sep, f) else xA(sep)
+                                val y = if (second) yB(sep, f) else bTop
+                                IntOffset((x - B / 2f).roundToInt(), y.roundToInt())
+                            }
                             .size((B / d).dp)
-                            .graphicsLayer { this.alpha = ((sep - 0.4f) / 0.6f).coerceIn(0f, 1f) }
+                            .graphicsLayer {
+                                val sc = if (second) scB(aFan.value) else 1f
+                                scaleX = sc; scaleY = sc
+                                this.alpha = ((s.sep.value - 0.4f) / 0.6f).coerceIn(0f, 1f)
+                            }
                             .clip(CircleShape)
                             .pointerInput(a.key) {
                                 detectTapGestures(
-                                    onTap = { buzz(); st.keepOpen = false; st.selected = a.key },
+                                    onTap = { tapBubble(s, a) },
                                     onLongPress = { buzz(); a.controls?.open?.invoke() },
                                 )
                             },
@@ -500,7 +567,7 @@ private fun IdleBox(g: Geo, pill: Boolean, appear: String) {
 @Composable
 private fun Art(bmp: Bitmap, size: Dp, corner: Dp, playing: Boolean) {
     PrefRev.current
-    val spin = P.mediaArtSpin.v
+    val spin = P.mediaArtSpin.v && !LocalSaver.current
     val rot = remember { Animatable(0f) }
     LaunchedEffect(spin && playing) {
         if (spin && playing) while (true) {
@@ -644,7 +711,9 @@ private fun Trail(a: Act, H: Float, maxW: Float) {
 }
 
 @Composable
-private fun Wave(color: Color, playing: Boolean, h: Dp) {
+private fun Wave(color: Color, live: Boolean, h: Dp) {
+    // وقت توفير البطارية الموجة تثبت
+    val playing = live && !LocalSaver.current
     val bars = 4
     val targets = remember { mutableStateListOf(0.4f, 0.75f, 0.5f, 0.85f) }
     LaunchedEffect(playing) {
@@ -691,8 +760,12 @@ private fun Expanded(a: Act, g: Geo, st: IslandState, picks: List<Act>) {
                 Kind.MEDIA -> MediaFull(a, st)
                 Kind.CALL_IN, Kind.CALL_ON -> CallFull(a)
                 Kind.TIMER -> TimerFull(a)
+                Kind.TORCH -> TorchFull(a, st)
                 else -> GenericFull(a)
             }
+            // أزرار التطبيق نفسه (إيقاف المؤقت، إلغاء التحميل، إنهاء التسجيل ...)
+            val btns = a.controls?.actions.orEmpty()
+            if (btns.isNotEmpty() && a.kind != Kind.MEDIA && a.kind != Kind.CALL_IN && a.kind != Kind.CALL_ON) ActionRow(btns, st)
             // أكثر من تطبيق شغال: صف أيقونات تختار منه
             if (picks.size > 1 && picks.any { it.key == a.key }) Switcher(a, picks, st)
         }
@@ -731,6 +804,73 @@ private fun Switcher(cur: Act, picks: List<Act>, st: IslandState) {
     }
 }
 
+/** صف أزرار من التطبيق نفسه */
+@Composable
+private fun ActionRow(btns: List<Pair<String, () -> Unit>>, st: IslandState) {
+    Spacer(Modifier.height(12.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        btns.take(3).forEach { (label, run) ->
+            Box(
+                Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.13f))
+                    .clickable { st.touchTick++; run() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label, style = ts(13.5f, FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp))
+            }
+        }
+    }
+}
+
+/** الكشاف: شدة الضوء (لو الجوال يسمح) وزر إطفاء */
+@Composable
+private fun TorchFull(a: Act, st: IslandState) {
+    val c = tint(a)
+    val ctl = a.controls
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(c.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.FlashlightOn, null, tint = c, modifier = Modifier.size(24.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(a.title, style = ts(15.5f, FontWeight.Bold), maxLines = 1)
+            if (a.text.isNotEmpty()) Text(a.text, style = ts(13.5f, color = Gray), maxLines = 1)
+        }
+        ctl?.off?.let { off ->
+            Box(
+                Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.14f)).clickable { off() },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Rounded.FlashlightOff, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
+        }
+    }
+    val set = ctl?.setLevel
+    if (a.levelMax > 1 && set != null) {
+        val max = a.levelMax
+        var drag by remember(a.key) { mutableStateOf<Float?>(null) }
+        var sent by remember(a.key) { mutableStateOf(-1) }
+        val frac = drag ?: ((a.level.coerceIn(1, max) - 1).toFloat() / (max - 1))
+        Spacer(Modifier.height(10.dp))
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Slider(
+                value = frac,
+                onValueChange = {
+                    drag = it; st.touchTick++
+                    val lv = 1 + (it * (max - 1)).roundToInt()
+                    if (lv != sent) { sent = lv; set(lv) }
+                },
+                onValueChangeFinished = { drag = null },
+                colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = c, inactiveTrackColor = Color.White.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxWidth().height(28.dp),
+            )
+        }
+    } else {
+        Spacer(Modifier.height(8.dp))
+        Text(t("جوالك ما يسمح للتطبيقات تغيّر شدة الكشاف", "Your phone doesn't let apps change flashlight strength"),
+            style = ts(12f, color = Gray))
+    }
+}
+
 @Composable
 private fun AppLine(a: Act) {
     if (a.app.isNotEmpty()) Text(a.app, style = ts(11.5f, FontWeight.Medium, Gray), maxLines = 1)
@@ -739,7 +879,7 @@ private fun AppLine(a: Act) {
 @Composable
 private fun MediaFull(a: Act, st: IslandState) {
     val c = tint(a)
-    rememberNow(a.playing, 500L)
+    rememberNow(a.playing, if (LocalSaver.current) 1000L else 500L)
     Row(verticalAlignment = Alignment.CenterVertically) {
         val icon = a.icon
         if (icon != null) {

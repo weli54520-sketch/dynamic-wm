@@ -42,7 +42,7 @@ class NotifListener : NotificationListenerService() {
     private var msm: MediaSessionManager? = null
     private val controllers = HashMap<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
     /** لكل تطبيق موسيقى: متى توقف، وغلافه المصغر ولونه */
-    private class ArtCache(var id: Int = -1, var bmp: Bitmap? = null, var color: Int = 0)
+    private class ArtCache(var id: Int = -1, var bmp: Bitmap? = null, var color: Int = 0, var bg: Int = 0)
     private val pausedSince = HashMap<String, Long>()
     private val arts = HashMap<String, ArtCache>()
     /** مفاتيح الموسيقى المعروضة الحين (media:<الحزمة>) */
@@ -108,6 +108,13 @@ class NotifListener : NotificationListenerService() {
         n.getLargeIcon()?.loadDrawable(this)?.toBitmap(128, 128)
     } catch (_: Exception) { null }
 
+    /** أزرار الإشعار اللي تشتغل بضغطة (بدون كتابة رد) */
+    private fun buttons(n: Notification): List<Pair<String, () -> Unit>> =
+        n.actions.orEmpty()
+            .filter { it.actionIntent != null && it.remoteInputs.isNullOrEmpty() && !it.title.isNullOrBlank() }
+            .take(3)
+            .map { a -> a.title.toString().trim() to { a.actionIntent.fire(); Unit } }
+
     private fun handle(sbn: StatusBarNotification, initial: Boolean) {
         val pkg = sbn.packageName
         if (pkg == packageName) return
@@ -157,7 +164,7 @@ class NotifListener : NotificationListenerService() {
         // 2) الخرائط
         if (n.category == "navigation" && ongoing) {
             Hub.put(Act(key, Kind.NAV, Pri.NAV, title = title, text = text, app = app, pkg = pkg,
-                icon = Apps.icon(this, pkg), accent = color, controls = Controls(open = open)))
+                icon = Apps.icon(this, pkg), accent = color, controls = Controls(open = open, actions = buttons(n))))
             return
         }
 
@@ -165,7 +172,7 @@ class NotifListener : NotificationListenerService() {
         val isClock = pkg in CLOCKS
         if ((chrono && ongoing) || (isClock && ongoing)) {
             Hub.put(Act(key, Kind.TIMER, Pri.TIMER, title = title.ifEmpty { app }, text = text, app = app, pkg = pkg,
-                chrono = if (chrono) n.`when` else 0L, countDown = countDown, controls = Controls(open = open)))
+                chrono = if (chrono) n.`when` else 0L, countDown = countDown, controls = Controls(open = open, actions = buttons(n))))
             return
         }
 
@@ -177,7 +184,7 @@ class NotifListener : NotificationListenerService() {
             if (!blocked) {
                 Hub.put(Act(key, Kind.PROGRESS, Pri.PROGRESS, title = title.ifEmpty { app }, text = text, app = app, pkg = pkg,
                     icon = Apps.icon(this, pkg), accent = color, indeterminate = indet || max <= 0,
-                    progress = if (max > 0) prog.toFloat() / max else -1f, controls = Controls(open = open)))
+                    progress = if (max > 0) prog.toFloat() / max else -1f, controls = Controls(open = open, actions = buttons(n))))
             }
             return
         }
@@ -187,7 +194,7 @@ class NotifListener : NotificationListenerService() {
         if (ongoing) {
             if (!blocked && pkg !in SYSTEM && importance(sbn) > 1 && (title.isNotEmpty() || text.isNotEmpty())) {
                 Hub.put(Act(key, Kind.ONGOING, Pri.ONGOING, title = title.ifEmpty { app }, text = text, app = app, pkg = pkg,
-                    icon = Apps.icon(this, pkg), accent = color, controls = Controls(open = open)))
+                    icon = Apps.icon(this, pkg), accent = color, controls = Controls(open = open, actions = buttons(n))))
             }
             return
         }
@@ -328,6 +335,7 @@ class NotifListener : NotificationListenerService() {
             key, Kind.MEDIA, if (playing) Pri.MEDIA else Pri.MEDIA_PAUSED,
             title = title, text = artist, app = Apps.label(this, pkg), pkg = pkg,
             icon = cache.bmp ?: Apps.icon(this, pkg), accent = if (cache.bmp != null) cache.color else 0,
+            bg = if (cache.bmp != null) cache.bg else 0,
             playing = playing, position = st?.position ?: 0L,
             duration = md.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0L),
             posAt = st?.lastPositionUpdateTime ?: 0L,
@@ -339,7 +347,7 @@ class NotifListener : NotificationListenerService() {
     /** نصغّر صورة الغلاف ونطلع لونها (مرة وحدة لكل صورة، ولكل تطبيق لحاله) */
     private fun prepareArt(pkg: String, art: Bitmap?): ArtCache {
         val cache = arts.getOrPut(pkg) { ArtCache() }
-        if (art == null) { cache.id = -1; cache.bmp = null; cache.color = 0; return cache }
+        if (art == null) { cache.id = -1; cache.bmp = null; cache.color = 0; cache.bg = 0; return cache }
         val id = System.identityHashCode(art) * 31 + art.generationId
         if (id == cache.id) return cache
         cache.id = id
@@ -349,19 +357,32 @@ class NotifListener : NotificationListenerService() {
             if (s < 1f) Bitmap.createScaledBitmap(art, (w * s).toInt().coerceAtLeast(1), (h * s).toInt().coerceAtLeast(1), true)
             else art.copy(art.config ?: Bitmap.Config.ARGB_8888, false)
         } catch (_: Exception) { null }
-        cache.color = 0
+        cache.color = 0; cache.bg = 0
         val src = cache.bmp ?: return cache
         bg.execute {
-            val col = try {
+            var col = 0
+            var back = 0
+            try {
                 val p = Palette.from(src).maximumColorCount(16).generate()
-                p.getVibrantColor(p.getLightVibrantColor(p.getDominantColor(0)))
-            } catch (_: Exception) { 0 }
-            main.post { if (cache.id == id) { cache.color = col; updateMedia() } }
+                col = p.getVibrantColor(p.getLightVibrantColor(p.getDominantColor(0)))
+                val dom = p.getDominantColor(0)
+                if (dom != 0) back = deep(dom)
+            } catch (_: Exception) {}
+            main.post { if (cache.id == id) { cache.color = col; cache.bg = back; updateMedia() } }
         }
         return cache
     }
 
     companion object {
+        /** لون غامق من لون الغلاف: يبان لونه والكتابة البيضاء تنقرى */
+        private fun deep(c: Int): Int {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(c, hsv)
+            hsv[1] = (hsv[1] * 1.1f).coerceAtMost(0.85f)
+            hsv[2] = hsv[2].coerceIn(0.20f, 0.36f)
+            return android.graphics.Color.HSVToColor(hsv)
+        }
+
         @Volatile var instance: NotifListener? = null
         private val ANSWER = listOf("answer", "accept", "رد", "إجابة", "اجابة", "قبول")
         private val DECLINE = listOf("decline", "reject", "رفض")

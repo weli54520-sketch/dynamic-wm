@@ -112,8 +112,6 @@ object P {
     val style = StrPref("style", "black")
     val accent = IntPref("accent", 0)
     val glow = BoolPref("glow", true)
-    /** 0 بطيئة ، 1 عادية ، 2 سريعة */
-    val speed = IntPref("speed", 1)
     val haptics = BoolPref("haptics", true)
     /** نمط الحركة: ios = نابض بارتداد خفيف ، smooth = ناعم بدون ارتداد ، fast = سريع */
     val motion = StrPref("motion", "ios")
@@ -127,8 +125,11 @@ object P {
     val goo = BoolPref("goo", true)
     /** hidden = مخفية ، pill = حبة صغيرة حول الكاميرا */
     val idle = StrPref("idle", "hidden")
-    val secondBubble = BoolPref("second_bubble", true)
     val hideLandscape = BoolPref("hide_land", true)
+    /** تختفي وقت ملء الشاشة (فيديو، ألعاب). المكالمة الواردة تطلع برضو */
+    val hideFullscreen = BoolPref("hide_full", true)
+    /** توفير البطارية تلقائي: لما يشتغل توفير الطاقة بالجوال أو تضعف البطارية */
+    val autoSaver = BoolPref("auto_saver", true)
     val autoCollapse = BoolPref("auto_collapse", true)
     val bg = IntPref("bg", 0)
 
