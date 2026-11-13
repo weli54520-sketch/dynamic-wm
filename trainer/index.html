@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مدربي الشخصي</title>
+<style>
+:root{
+  --bg:#f4f6f8; --card:#ffffff; --text:#1b2330; --muted:#6b7686; --line:#e3e8ee;
+  --accent:#0f9d74; --accent-soft:#e2f5ee; --warn:#d9822b; --warn-soft:#fdf0e2; --bad:#d64545;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1318; --card:#181e26; --text:#e8edf3; --muted:#93a0b0; --line:#2a323d;
+    --accent:#34c79a; --accent-soft:#163329; --warn:#f0a24f; --warn-soft:#3a2a17; --bad:#ff6b6b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1318; --card:#181e26; --text:#e8edf3; --muted:#93a0b0; --line:#2a323d;
+  --accent:#34c79a; --accent-soft:#163329; --warn:#f0a24f; --warn-soft:#3a2a17; --bad:#ff6b6b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;line-height:1.6}
+header{padding:20px 16px 8px;max-width:720px;margin:auto}
+header h1{margin:0;font-size:1.5rem}
+header p{margin:4px 0 0;color:var(--muted)}
+nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+nav .in{max-width:720px;margin:auto;display:flex;gap:4px;padding:8px 16px;overflow-x:auto}
+nav button{flex:1 0 auto;border:0;background:transparent;color:var(--muted);padding:8px 12px;border-radius:10px;font:inherit;cursor:pointer}
+nav button.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+main{max-width:720px;margin:auto;padding:16px}
+section{display:none} section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:1.1rem}
+.card h3{margin:14px 0 6px;font-size:1rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{background:var(--bg);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:1.35rem}
+.stat span{color:var(--muted);font-size:.85rem}
+label{display:block;font-size:.9rem;color:var(--muted);margin-bottom:4px}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);font:inherit}
+.btn{border:0;background:var(--accent);color:#fff;padding:10px 16px;border-radius:10px;font:inherit;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.row>div{flex:1 1 140px}
+.note{background:var(--accent-soft);border-radius:12px;padding:10px 12px;margin:8px 0}
+.note.warn{background:var(--warn-soft)}
+.muted{color:var(--muted);font-size:.9rem}
+ul.ex{list-style:none;margin:0;padding:0}
+ul.ex li{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+ul.ex li:last-child{border-bottom:0}
+ul.ex input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+ul.ex li.done .nm{text-decoration:line-through;color:var(--muted)}
+.nm{font-weight:600}
+.bar{height:10px;background:var(--bg);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:6px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:8px 4px;border-bottom:1px solid var(--line);text-align:right}
+th{color:var(--muted);font-weight:500;font-size:.85rem}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:.7rem}
+.week div{background:var(--bg);border-radius:8px;padding:6px 2px}
+.week div.t{outline:2px solid var(--accent)}
+.week div.rest{color:var(--muted)}
+.meal{border-bottom:1px solid var(--line);padding:8px 0}
+.meal:last-child{border-bottom:0}
+svg{direction:ltr}
+svg text{fill:var(--muted);font-size:20px}
+.x{border:0;background:none;color:var(--bad);cursor:pointer;font-size:1rem}
+footer{max-width:720px;margin:auto;padding:0 16px 30px;color:var(--muted);font-size:.8rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏋️ مدربي الشخصي</h1>
+  <p id="hello">عبّ بياناتك وأبني لك خطة كاملة لين توصل هدفك.</p>
+</header>
+<nav><div class="in">
+  <button data-t="home" class="on">الرئيسية</button>
+  <button data-t="train">التمرين</button>
+  <button data-t="food">الوجبات</button>
+  <button data-t="weight">وزني</button>
+  <button data-t="me">ملفي</button>
+</div></nav>
+
+<main>
+<!-- الرئيسية -->
+<section id="home" class="on"></section>
+
+<!-- التمرين -->
+<section id="train"></section>
+
+<!-- الوجبات -->
+<section id="food"></section>
+
+<!-- الوزن -->
+<section id="weight">
+  <div class="card">
+    <h2>سجّل وزنك</h2>
+    <div class="row">
+      <div><label>التاريخ</label><input type="date" id="wDate"></div>
+      <div><label>الوزن (كجم)</label><input type="number" step="0.1" id="wVal" inputmode="decimal"></div>
+      <div style="flex:0 0 auto"><button class="btn" id="wAdd">حفظ</button></div>
+    </div>
+    <p class="muted">أفضل وقت: الصبح بعد الحمام وقبل الأكل، مرة أو مرتين بالأسبوع.</p>
+  </div>
+  <div class="card"><h2>رسم التقدم</h2><div id="chart"></div></div>
+  <div class="card"><h2>رأي المدرب</h2><div id="coach"></div></div>
+  <div class="card"><h2>السجل</h2><div id="wList"></div></div>
+</section>
+
+<!-- ملفي -->
+<section id="me">
+  <div class="card">
+    <h2>بياناتي</h2>
+    <div class="grid">
+      <div><label>اسمك</label><input id="pName" placeholder="مثلاً: وليد"></div>
+      <div><label>الجنس</label><select id="pSex"><option value="m">ذكر</option><option value="f">أنثى</option></select></div>
+      <div><label>العمر</label><input type="number" id="pAge" inputmode="numeric"></div>
+      <div><label>الطول (سم)</label><input type="number" id="pH" inputmode="numeric"></div>
+      <div><label>الوزن الحالي (كجم)</label><input type="number" step="0.1" id="pW" inputmode="decimal"></div>
+      <div><label>الوزن المستهدف (كجم)</label><input type="number" step="0.1" id="pTarget" inputmode="decimal"></div>
+      <div><label>الهدف</label><select id="pGoal">
+        <option value="bulk">تضخيم (زيادة عضل)</option>
+        <option value="cut">تنشيف (نزول دهون)</option>
+        <option value="keep">محافظة وشد</option>
+      </select></div>
+      <div><label>نشاطك اليومي (غير التمرين)</label><select id="pAct">
+        <option value="1.375">قليل (دوام مكتبي)</option>
+        <option value="1.55" selected>متوسط (أمشي كثير)</option>
+        <option value="1.725">عالي (شغل بدني)</option>
+      </select></div>
+      <div><label>أيام التمرين بالأسبوع</label><select id="pDays">
+        <option value="3">3 أيام</option><option value="4" selected>4 أيام</option><option value="5">5 أيام</option>
+      </select></div>
+      <div><label>وين تتمرن؟</label><select id="pPlace">
+        <option value="gym">نادي</option><option value="home">البيت (بدون أجهزة)</option>
+      </select></div>
+      <div><label>مستواك</label><select id="pLevel">
+        <option value="beg">مبتدئ</option><option value="mid">متوسط</option>
+      </select></div>
+    </div>
+    <p style="margin-top:14px"><button class="btn" id="pSave">احفظ وابنِ خطتي</button></p>
+    <p id="pMsg" class="muted"></p>
+  </div>
+  <div class="card">
+    <h2>إعدادات</h2>
+    <div class="row">
+      <div><label>الشكل</label><select id="theme"><option value="">حسب الجوال</option><option value="light">فاتح</option><option value="dark">داكن</option></select></div>
+    </div>
+    <p style="margin-top:12px"><button class="btn danger" id="reset">امسح كل بياناتي</button></p>
+  </div>
+</section>
+</main>
+<footer>البيانات تنحفظ في متصفحك بس، وما تطلع لأي مكان. هذي إرشادات عامة، مو بديل عن الطبيب أو أخصائي التغذية.</footer>
+
+<script>
+/* ================= التخزين ================= */
+const KEY = "trainer.v1";
+function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || {}; }catch(e){ return {}; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+let S = load();
+S.logs = S.logs || [];      // [{d:"2026-11-13", w:80.5}]
+S.done = S.done || {};      // {"2026-11-13": [0,2]}
+S.adj  = S.adj  || 0;       // تعديل السعرات من المدرب
+
+const $ = id => document.getElementById(id);
+const today = () => new Date().toLocaleDateString("en-CA");
+const fmt = n => Math.round(n).toLocaleString("ar-SA");
+const fmt1 = n => (Math.round(n*10)/10).toLocaleString("ar-SA");
+const DAYS = ["الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+const SHORT = ["أحد","إثنين","ثلاثاء","أربعاء","خميس","جمعة","سبت"];
+const GOAL = {bulk:"تضخيم", cut:"تنشيف", keep:"محافظة"};
+
+/* ================= الحسابات ================= */
+function curWeight(){
+  const l = [...S.logs].sort((a,b)=>a.d<b.d?-1:1);
+  return l.length ? l[l.length-1].w : S.p.w;
+}
+function calc(){
+  const p = S.p, w = curWeight();
+  // معادلة Mifflin-St Jeor
+  const bmr = 10*w + 6.25*p.h - 5*p.age + (p.sex==="m" ? 5 : -161);
+  const tdee = bmr * p.act;
+  const base = {bulk:+300, cut:-500, keep:0}[p.goal];
+  let kcal = tdee + base + S.adj;
+  const floor = p.sex==="m" ? 1500 : 1200;
+  if (kcal < floor) kcal = floor;
+  const protein = w * (p.goal==="cut" ? 2.2 : 2.0);
+  const fat = kcal * 0.25 / 9;
+  const carbs = Math.max(0, (kcal - protein*4 - fat*9) / 4);
+  const bmi = w / Math.pow(p.h/100, 2);
+  const water = w * 0.035;
+  // سرعة التغيير المتوقعة بالأسبوع
+  const rate = {bulk:0.3, cut:-0.6, keep:0}[p.goal];
+  const diff = p.target - w;
+  let weeks = null;
+  if (rate !== 0 && Math.sign(diff) === Math.sign(rate)) weeks = Math.ceil(Math.abs(diff / rate));
+  return {w, bmr, tdee, kcal, protein, fat, carbs, bmi, water, rate, diff, weeks};
+}
+
+/* ================= التمارين ================= */
+const EX = {
+  gym:{
+    chest:["ضغط بار مستوي","ضغط دمبل مائل","تفتيح كيبل"],
+    back:["سحب أمامي (لات)","تجديف بار","تجديف كيبل جالس"],
+    shoulders:["ضغط أكتاف دمبل","رفرفة جانبي"],
+    legs:["سكوات بار","ضغط أرجل","رفعة رومانية","سمانة واقف"],
+    arms:["بايسبس بار","ترايسبس كيبل"],
+    core:["بلانك","رفع رجول معلق"]
+  },
+  home:{
+    chest:["ضغط عادي","ضغط مائل (الرجل فوق الكرسي)","ضغط ضيق"],
+    back:["سحب على الباب أو العقلة","تجديف بالشنطة","سوبرمان"],
+    shoulders:["ضغط بايك","رفرفة بقوارير ماء"],
+    legs:["سكوات","لنجز","جسر الحوض","سمانة على الدرج"],
+    arms:["بايسبس بالشنطة","ديبس على الكرسي"],
+    core:["بلانك","كرنشز"]
+  }
+};
+const SPLITS = {
+  3:[["full","جسم كامل أ",["chest","back","legs","core"]],
+     ["full","جسم كامل ب",["shoulders","legs","back","arms"]],
+     ["full","جسم كامل ج",["chest","legs","shoulders","core"]]],
+  4:[["upper","علوي",["chest","back","shoulders","arms"]],
+     ["lower","سفلي",["legs","core"]],
+     ["upper","علوي",["back","chest","shoulders","arms"]],
+     ["lower","سفلي",["legs","core"]]],
+  5:[["push","دفع (صدر/أكتاف/ترايسبس)",["chest","shoulders","arms"]],
+     ["pull","سحب (ظهر/بايسبس)",["back","arms","core"]],
+     ["legs","أرجل",["legs","core"]],
+     ["upper","علوي",["chest","back","shoulders"]],
+     ["lower","سفلي",["legs","core"]]]
+};
+// أي أيام الأسبوع تمرين (0 = الأحد)
+const SCHED = {3:[0,2,4], 4:[0,1,3,4], 5:[0,1,2,4,5]};
+
+function dayPlan(dow){
+  const p = S.p, idx = SCHED[p.days].indexOf(dow);
+  if (idx < 0) return null;
+  const [, title, groups] = SPLITS[p.days][idx];
+  const lib = EX[p.place];
+  const list = [];
+  groups.forEach((g, gi) => {
+    const n = (p.level==="beg" ? 1 : 2) + (g==="legs" && groups.length<=2 ? 1 : 0);
+    lib[g].slice(0, n).forEach((name, k) => {
+      // نبدّل التمارين بين الأيام شوي عشان ما تتكرر
+      const pick = lib[g][(k + idx) % lib[g].length];
+      if (!list.find(e=>e.name===pick)) list.push({name:pick, g});
+    });
+  });
+  const scheme = {
+    bulk:{sets: p.level==="beg"?3:4, reps:"8-12", rest:"90 ثانية"},
+    cut:{sets:3, reps:"12-15", rest:"60 ثانية"},
+    keep:{sets:3, reps:"10-12", rest:"75 ثانية"}
+  }[p.goal];
+  list.forEach(e => { e.sets = e.g==="core" ? 3 : scheme.sets; e.reps = e.g==="core" ? (e.name.includes("بلانك")?"30-45 ثانية":"15") : scheme.reps; });
+  const cardio = {bulk:"10 دقايق مشي سريع إحماء بس", cut:"20-30 دقيقة مشي سريع أو دراجة بعد التمرين", keep:"15 دقيقة كارديو خفيف"}[p.goal];
+  return {title, list, rest: scheme.rest, cardio};
+}
+
+/* ================= الرسم ================= */
+function renderHome(){
+  const el = $("home");
+  if (!S.p){
+    el.innerHTML = `<div class="card"><h2>هلا والله 👋</h2>
+      <p>أنا مدربك الشخصي. عشان أبني لك خطة لازم أعرفك أول.</p>
+      <ol><li>روح لتبويب <b>ملفي</b>.</li><li>عبّ وزنك وطولك وهدفك.</li><li>اضغط <b>احفظ وابنِ خطتي</b>.</li></ol>
+      <button class="btn" onclick="go('me')">يلا نبدأ</button></div>`;
+    return;
+  }
+  const c = calc(), p = S.p, dow = new Date().getDay(), plan = dayPlan(dow);
+  const start = S.p.startW || p.w;
+  const total = Math.abs(p.target - start) || 1;
+  const gone = p.goal==="keep" ? 1 : Math.min(1, Math.max(0, (p.target>start ? c.w-start : start-c.w) / total));
+  const week = DAYS.map((d,i)=>{ const dp = dayPlan(i);
+    return `<div class="${i===dow?'t':''} ${dp?'':'rest'}">${SHORT[i]}<br>${dp?'💪':'😴'}</div>`; }).join("");
+  const doneToday = (S.done[today()]||[]).length;
+  el.innerHTML = `
+  <div class="card">
+    <h2>هدفك: ${GOAL[p.goal]}</h2>
+    <div class="grid">
+      <div class="stat"><b>${fmt1(c.w)}</b><span>وزنك الحين (كجم)</span></div>
+      <div class="stat"><b>${fmt1(p.target)}</b><span>هدفك (كجم)</span></div>
+      <div class="stat"><b>${c.weeks ? fmt(c.weeks)+" أسبوع" : "—"}</b><span>المدة المتوقعة</span></div>
+    </div>
+    <h3>وين وصلت</h3>
+    <div class="bar"><i style="width:${Math.round(gone*100)}%"></i></div>
+    <p class="muted">${Math.round(gone*100)}٪ من الطريق${c.weeks===null && p.goal!=="keep" ? " — الوزن المستهدف ما يناسب الهدف، عدّله في ملفي" : ""}</p>
+  </div>
+  <div class="card">
+    <h2>أرقامك اليومية</h2>
+    <div class="grid">
+      <div class="stat"><b>${fmt(c.kcal)}</b><span>سعرة (Calories)</span></div>
+      <div class="stat"><b>${fmt(c.protein)} جم</b><span>بروتين (Protein)</span></div>
+      <div class="stat"><b>${fmt(c.carbs)} جم</b><span>كارب (Carbs)</span></div>
+      <div class="stat"><b>${fmt(c.fat)} جم</b><span>دهون (Fat)</span></div>
+      <div class="stat"><b>${fmt1(c.water)} لتر</b><span>موية</span></div>
+      <div class="stat"><b>${fmt1(c.bmi)}</b><span>مؤشر الكتلة (BMI)</span></div>
+    </div>
+    ${S.adj ? `<p class="muted">فيها تعديل من المدرب: ${S.adj>0?"+":""}${fmt(S.adj)} سعرة.</p>` : ""}
+  </div>
+  <div class="card">
+    <h2>اليوم: ${DAYS[dow]}</h2>
+    ${plan ? `<p>تمرين <b>${plan.title}</b> — ${plan.list.length} تمارين. خلصت ${fmt(doneToday)} منها.</p>
+      <button class="btn" onclick="go('train')">افتح تمرين اليوم</button>`
+      : `<p>اليوم راحة 😴. الراحة جزء من الخطة، العضل يكبر وقت الراحة. امشِ شوي ونم زين.</p>`}
+    <h3>أسبوعك</h3><div class="week">${week}</div>
+  </div>`;
+}
+
+function renderTrain(){
+  const el = $("train");
+  if (!S.p){ el.innerHTML = `<div class="card">عبّ <a href="#" onclick="go('me')">ملفك</a> أول.</div>`; return; }
+  const dow = new Date().getDay(), plan = dayPlan(dow), done = S.done[today()] || [];
+  let html = "";
+  if (!plan){
+    const next = [1,2,3,4,5,6].map(k=>(dow+k)%7).find(d=>dayPlan(d));
+    html += `<div class="card"><h2>اليوم راحة 😴</h2><p>تمرينك الجاي يوم <b>${DAYS[next]}</b>: ${dayPlan(next).title}.</p>
+      <p class="muted">لو تبي تسوي شي: مشي 30 دقيقة أو تمارين إطالة (Stretching = تمديد العضلات).</p></div>`;
+  } else {
+    html += `<div class="card"><h2>تمرين اليوم: ${plan.title}</h2>
+      <div class="note">🔥 إحماء (Warm-up = تسخين): 5-10 دقايق حركة خفيفة قبل تبدأ.</div>
+      <ul class="ex">${plan.list.map((e,i)=>`
+        <li class="${done.includes(i)?'done':''}">
+          <input type="checkbox" data-i="${i}" ${done.includes(i)?'checked':''}>
+          <div><div class="nm">${e.name}</div><div class="muted">${fmt(e.sets)} مجموعات × ${e.reps} عدّة — راحة ${plan.rest}</div></div>
+        </li>`).join("")}</ul>
+      <div class="note">🏃 كارديو (Cardio = تمرين قلب): ${plan.cardio}</div>
+      <p class="muted">قاعدة التقدم (Progressive Overload = زيادة الحمل): كل ما قدرت تكمل كل العدّات بسهولة، زد الوزن شوي أو عدّتين.</p>
+    </div>`;
+  }
+  html += `<div class="card"><h2>جدول الأسبوع كامل</h2>${DAYS.map((d,i)=>{const dp=dayPlan(i);
+    return `<div class="meal"><b>${d}:</b> ${dp ? dp.title + `<div class="muted">${dp.list.map(e=>e.name).join("، ")}</div>` : '<span class="muted">راحة</span>'}</div>`;}).join("")}</div>`;
+  el.innerHTML = html;
+  el.querySelectorAll("input[type=checkbox]").forEach(cb => cb.onchange = () => {
+    const i = +cb.dataset.i, t = today(); let d = S.done[t] || [];
+    d = cb.checked ? [...new Set([...d, i])] : d.filter(x=>x!==i);
+    S.done[t] = d; save(); renderTrain(); renderHome();
+    if (cb.checked && d.length === plan.list.length) alert("كفو! خلصت تمرين اليوم 💪");
+  });
+}
+
+function renderFood(){
+  const el = $("food");
+  if (!S.p){ el.innerHTML = `<div class="card">عبّ <a href="#" onclick="go('me')">ملفك</a> أول.</div>`; return; }
+  const c = calc(), g = S.p.goal;
+  const split = [["الفطور",0.25],["الغدا",0.35],["سناك (وجبة خفيفة)",0.15],["العشا",0.25]];
+  const ideas = {
+    bulk:[
+      "شوفان بالحليب + موز + ملعقة زبدة فول سوداني + 3 بيض",
+      "رز (كوبين) + دجاج أو لحم 200 جم + سلطة + لبن",
+      "زبادي يوناني + تمر + حفنة مكسرات",
+      "خبز بر + تونة أو بيض + جبن + خضار"],
+    cut:[
+      "3 بيض (واحد كامل والباقي بياض) + خبز بر صغير + خيار وطماطم",
+      "دجاج مشوي 150-200 جم + رز كوب واحد أو أقل + سلطة كبيرة",
+      "زبادي يوناني قليل الدسم أو تفاحة + حبتين تمر",
+      "تونة بالماء أو صدر دجاج + خضار سوتيه + شوربة عدس"],
+    keep:[
+      "بيض + فول + خبز بر",
+      "رز كوب ونص + دجاج أو سمك + سلطة",
+      "فواكه + لبن",
+      "شاورما دجاج بدون صوص أو سلطة بالتونة"]
+  }[g];
+  const tips = {
+    bulk:["كل كل 3-4 ساعات، لا تفوّت وجبة.","لو صعب تاكل كثير: اشرب سعراتك (حليب + موز + شوفان بالخلاط).","النوم 7-9 ساعات، العضل يبني وقت النوم.","زيادة الوزن بالأسبوع ربع إلى نص كيلو بس، أكثر من كذا غالباً دهون."],
+    cut:["البروتين عالي عشان تحافظ على عضلك.","الخضار تشبّع وسعراتها قليلة، كثّر منها.","انتبه للمشروبات: العصير والقهوة المحلاة سعراتها عالية.","لا تنزل أكثر من كيلو بالأسبوع، عشان ما تخسر عضل."],
+    keep:["حافظ على البروتين يومياً.","وازن بين الكارب والخضار.","ثبّت مواعيد الوجبات قدر ما تقدر."]
+  }[g];
+  el.innerHTML = `
+  <div class="card"><h2>توزيع يومك (${fmt(c.kcal)} سعرة)</h2>
+    ${split.map(([n,f],i)=>`<div class="meal"><b>${n}</b> — ${fmt(c.kcal*f)} سعرة، تقريباً ${fmt(c.protein*f)} جم بروتين
+      <div class="muted">مثال: ${ideas[i]}</div></div>`).join("")}
+  </div>
+  <div class="card"><h2>نصايح ${GOAL[g]}</h2><ul>${tips.map(t=>`<li>${t}</li>`).join("")}</ul>
+    <div class="note">💧 اشرب ${fmt1(c.water)} لتر موية باليوم، وأكثر في أيام التمرين.</div>
+  </div>
+  <div class="card"><h2>مصادر بروتين سهلة</h2>
+    <table><tr><th>الأكل</th><th>الكمية</th><th>بروتين تقريبي</th></tr>
+      <tr><td>صدر دجاج</td><td>100 جم مطبوخ</td><td>31 جم</td></tr>
+      <tr><td>بيضة كاملة</td><td>حبة</td><td>6 جم</td></tr>
+      <tr><td>تونة بالماء</td><td>علبة</td><td>25 جم</td></tr>
+      <tr><td>لحم قليل الدهن</td><td>100 جم مطبوخ</td><td>26 جم</td></tr>
+      <tr><td>زبادي يوناني</td><td>علبة 170 جم</td><td>15 جم</td></tr>
+      <tr><td>عدس مطبوخ</td><td>كوب</td><td>18 جم</td></tr>
+    </table>
+  </div>`;
+}
+
+function renderWeight(){
+  const logs = [...S.logs].sort((a,b)=>a.d<b.d?-1:1);
+  // القائمة
+  $("wList").innerHTML = logs.length ? `<table><tr><th>التاريخ</th><th>الوزن</th><th>الفرق</th><th></th></tr>${
+    logs.slice().reverse().map((l,i,arr)=>{ const prev = arr[i+1]; const d = prev ? l.w-prev.w : 0;
+      return `<tr><td>${l.d}</td><td>${fmt1(l.w)}</td><td>${prev ? (d>0?"+":"")+fmt1(d) : "—"}</td>
+      <td><button class="x" data-d="${l.d}" title="حذف">✕</button></td></tr>`; }).join("")}</table>`
+    : `<p class="muted">ما سجلت شي للحين.</p>`;
+  $("wList").querySelectorAll(".x").forEach(b => b.onclick = () => {
+    S.logs = S.logs.filter(l=>l.d!==b.dataset.d); save(); renderAll(); });
+  // الرسم
+  $("chart").innerHTML = chartSvg(logs);
+  // المدرب
+  $("coach").innerHTML = coach(logs);
+  const ap = $("applyAdj"); if (ap) ap.onclick = () => { S.adj += +ap.dataset.v; save(); renderAll(); alert("تم تعديل سعراتك ✅"); };
+}
+
+function chartSvg(logs){
+  if (logs.length < 2) return `<p class="muted">سجّل وزنك مرتين على الأقل عشان يطلع الرسم.</p>`;
+  const W = 640, H = 300, pad = 60;
+  const t = logs.map(l=>new Date(l.d).getTime());
+  const ws = logs.map(l=>l.w);
+  if (S.p) ws.push(S.p.target);
+  let lo = Math.min(...ws) - 1, hi = Math.max(...ws) + 1;
+  const t0 = t[0], t1 = t[t.length-1] === t0 ? t0+1 : t[t.length-1];
+  const X = v => pad + (v-t0)/(t1-t0)*(W-pad*2);
+  const Y = v => H-pad - (v-lo)/(hi-lo)*(H-pad*2);
+  const pts = logs.map((l,i)=>`${X(t[i]).toFixed(1)},${Y(l.w).toFixed(1)}`).join(" ");
+  const tgt = S.p ? `<line x1="${pad}" x2="${W-pad}" y1="${Y(S.p.target)}" y2="${Y(S.p.target)}" stroke="var(--warn)" stroke-dasharray="6 5"/>
+    <text x="${W-pad}" y="${Y(S.p.target)-6}" text-anchor="end">الهدف ${fmt1(S.p.target)}</text>` : "";
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="رسم الوزن">
+    <line x1="${pad}" x2="${W-pad}" y1="${H-pad}" y2="${H-pad}" stroke="var(--line)"/>
+    <text x="${pad}" y="${Y(hi-1)+4}" text-anchor="end" dx="-4">${fmt1(hi-1)}</text>
+    <text x="${pad}" y="${Y(lo+1)+4}" text-anchor="end" dx="-4">${fmt1(lo+1)}</text>
+    ${tgt}
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>
+    ${logs.map((l,i)=>`<circle cx="${X(t[i])}" cy="${Y(l.w)}" r="3.5" fill="var(--accent)"><title>${l.d}: ${l.w}</title></circle>`).join("")}
+    <text x="${pad}" y="${H-14}">${logs[0].d.slice(5)}</text>
+    <text x="${W-pad}" y="${H-10}" text-anchor="end">${logs[logs.length-1].d.slice(5)}</text>
+  </svg>`;
+}
+
+/* المدرب: يشوف سرعة تغير وزنك ويقترح تعديل */
+function coach(logs){
+  if (!S.p) return `<p class="muted">عبّ ملفك أول.</p>`;
+  if (logs.length < 2) return `<p>سجّل وزنك كل أسبوع، وبعد أسبوعين أقولك إذا الخطة ماشية صح أو نعدلها.</p>`;
+  const last = logs[logs.length-1];
+  const from = new Date(last.d); from.setDate(from.getDate()-28);
+  const win = logs.filter(l => new Date(l.d) >= from);
+  const first = win[0];
+  const days = (new Date(last.d) - new Date(first.d)) / 864e5;
+  if (days < 10) return `<p>محتاج بيانات أكثر من 10 أيام عشان أحكم صح. كمّل تسجيل 👍</p>`;
+  const perWeek = (last.w - first.w) / days * 7;
+  const g = S.p.goal;
+  let msg, v = 0, cls = "note";
+  const r = `وزنك يتغير ${perWeek>0?"+":""}${fmt1(perWeek)} كجم بالأسبوع.`;
+  if (g==="bulk"){
+    if (perWeek < 0.1){ msg = "التضخيم بطيء. نزيد أكلك شوي."; v = 200; cls="note warn"; }
+    else if (perWeek > 0.6){ msg = "تزيد بسرعة، غالباً دهون. نخفف شوي."; v = -150; cls="note warn"; }
+    else msg = "ممتاز! سرعة مثالية للتضخيم. كمّل كذا 💪";
+  } else if (g==="cut"){
+    if (perWeek > -0.25){ msg = "النزول بطيء. نقلل أكلك شوي، وزد المشي."; v = -200; cls="note warn"; }
+    else if (perWeek < -1){ msg = "تنزل بسرعة، ممكن تخسر عضل. نزيد أكلك شوي."; v = 150; cls="note warn"; }
+    else msg = "ممتاز! تنزل بسرعة صحية. كمّل كذا 🔥";
+  } else {
+    if (Math.abs(perWeek) > 0.3){ v = perWeek>0 ? -150 : 150; msg = "وزنك يتحرك أكثر من اللازم. نعدل شوي."; cls="note warn"; }
+    else msg = "وزنك ثابت. ممتاز 👌";
+  }
+  return `<div class="${cls}"><p style="margin:0">${r} ${msg}</p></div>
+    ${v ? `<button class="btn" id="applyAdj" data-v="${v}">طبّق التعديل (${v>0?"+":""}${v} سعرة)</button>` : ""}`;
+}
+
+/* ================= الملف ================= */
+function fillProfile(){
+  const p = S.p; if (!p) return;
+  $("pName").value = p.name||""; $("pSex").value = p.sex; $("pAge").value = p.age; $("pH").value = p.h;
+  $("pW").value = curWeight(); $("pTarget").value = p.target; $("pGoal").value = p.goal; $("pAct").value = String(p.act);
+  $("pDays").value = String(p.days); $("pPlace").value = p.place; $("pLevel").value = p.level;
+}
+$("pSave").onclick = () => {
+  const p = {
+    name: $("pName").value.trim(), sex: $("pSex").value, age: +$("pAge").value, h: +$("pH").value,
+    w: +$("pW").value, target: +$("pTarget").value, goal: $("pGoal").value, act: +$("pAct").value,
+    days: +$("pDays").value, place: $("pPlace").value, level: $("pLevel").value
+  };
+  const bad = [];
+  if (!(p.age>=13 && p.age<=90)) bad.push("العمر");
+  if (!(p.h>=120 && p.h<=230)) bad.push("الطول");
+  if (!(p.w>=30 && p.w<=300)) bad.push("الوزن");
+  if (!p.target) p.target = p.w;
+  if (bad.length){ $("pMsg").textContent = "تأكد من: " + bad.join("، "); return; }
+  if (p.goal==="bulk" && p.target < p.w) { $("pMsg").textContent = "في التضخيم لازم الوزن المستهدف أكبر من وزنك."; return; }
+  if (p.goal==="cut" && p.target > p.w) { $("pMsg").textContent = "في التنشيف لازم الوزن المستهدف أقل من وزنك."; return; }
+  const changedGoal = !S.p || S.p.goal !== p.goal;
+  p.startW = changedGoal ? p.w : (S.p.startW || p.w);
+  if (changedGoal) S.adj = 0;
+  S.p = p;
+  // نسجل الوزن اليوم لو تغير
+  const last = [...S.logs].sort((a,b)=>a.d<b.d?-1:1).pop();
+  if (!last || last.w !== p.w){ S.logs = S.logs.filter(l=>l.d!==today()); S.logs.push({d:today(), w:p.w}); }
+  save(); renderAll(); go("home");
+};
+$("wAdd").onclick = () => {
+  const d = $("wDate").value || today(), w = +$("wVal").value;
+  if (!(w>=30 && w<=300)) { alert("اكتب وزن صحيح"); return; }
+  S.logs = S.logs.filter(l=>l.d!==d); S.logs.push({d, w}); save();
+  $("wVal").value = ""; renderAll();
+};
+$("reset").onclick = () => {
+  if (!confirm("أكيد تبي تمسح كل شي؟ ما يرجع.")) return;
+  S = {logs:[], done:{}, adj:0}; save(); location.reload();
+};
+/* الشكل */
+function applyTheme(){ const t = S.theme||""; if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; $("theme").value = t; }
+$("theme").onchange = e => { S.theme = e.target.value; save(); applyTheme(); };
+
+/* ================= التبويبات ================= */
+function go(t){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.t===t));
+  document.querySelectorAll("main section").forEach(s=>s.classList.toggle("on", s.id===t));
+  window.scrollTo(0,0);
+  return false;
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => go(b.dataset.t));
+
+function renderAll(){
+  $("hello").textContent = S.p && S.p.name ? `هلا ${S.p.name}، خلنا نوصل هدفك خطوة خطوة.` : "عبّ بياناتك وأبني لك خطة كاملة لين توصل هدفك.";
+  renderHome(); renderTrain(); renderFood(); renderWeight(); fillProfile();
+}
+$("wDate").value = today();
+applyTheme(); renderAll();
+</script>
+</body>
+</html>
