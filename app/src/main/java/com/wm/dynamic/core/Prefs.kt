@@ -82,10 +82,16 @@ object P {
     /** كم ثانية تبقى الموسيقى بعد الإيقاف المؤقت (0 = تختفي فوراً) */
     val mediaKeep = IntPref("f_media_keep", 5)
     val mediaArtSpin = BoolPref("f_media_spin", false)
+    /** السحب يمين/يسار على الأغنية = الجاية/اللي قبلها (بدل التبديل بين الأنشطة) */
+    val swipeSong = BoolPref("f_swipe_song", true)
     val mediaTintBg = BoolPref("f_media_tint", true)
     val call = BoolPref("f_call", true)
     val callControls = BoolPref("f_call_ctrl", true)
+    val missed = BoolPref("f_missed", true)
     val timer = BoolPref("f_timer", true)
+    val alarm = BoolPref("f_alarm", true)
+    /** تسجيل الشاشة والصوت */
+    val record = BoolPref("f_record", true)
     val nav = BoolPref("f_nav", true)
     val progress = BoolPref("f_progress", true)
     val ongoing = BoolPref("f_ongoing", true)
@@ -133,6 +139,8 @@ object P {
     /** توفير البطارية تلقائي: لما يشتغل توفير الطاقة بالجوال أو تضعف البطارية */
     val autoSaver = BoolPref("auto_saver", true)
     val autoCollapse = BoolPref("auto_collapse", true)
+    /** ضغطة على الكاميرا (والجزيرة مخفية) = لوحة السطوع والصوت، والسحب لتحت منها = الإشعارات */
+    val camTap = BoolPref("cam_tap", true)
     val bg = IntPref("bg", 0)
 
     // لمستك

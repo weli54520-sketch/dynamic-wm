@@ -1,6 +1,16 @@
 package com.wm.dynamic.island
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.FiberManualRecord
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.PhoneMissed
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.ui.platform.LocalContext
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Rect
@@ -167,7 +177,7 @@ private fun ts(size: Float, weight: FontWeight = FontWeight.Normal, color: Color
     TextStyle(fontFamily = Plex, fontSize = size.sp, fontWeight = weight, color = color)
 
 /** وش تبي الجزيرة من النوافذ: ارتفاع نافذة الرسم (px) ومكان اللمس (px) */
-data class IslandReq(val drawH: Int, val touch: Rect?, val watchOutside: Boolean)
+data class IslandReq(val drawH: Int, val touch: Rect?, val watchOutside: Boolean, val idle: Boolean = false)
 
 /** أرقام النابض حسب نمط الحركة */
 private fun springOf(motion: String): Pair<Float, Float> = when (motion) {
@@ -196,7 +206,9 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
     val scope = rememberCoroutineScope()
 
     // ملء الشاشة (فيديو، ألعاب): نخفيها، إلا المكالمة الواردة
-    val acts = if (st.fullscreen && P.hideFullscreen.v) all.filter { it.kind == Kind.CALL_IN } else all
+    val acts = if (st.fullscreen && P.hideFullscreen.v) all.filter {
+        it.kind == Kind.CALL_IN || it.kind == Kind.CONTROLS || (it.kind == Kind.ALARM && it.autoExpand)
+    } else all
 
     // نحفظ آخر نسخة من كل نشاط عشان حركة الرجوع تلقى شي ترسمه
     val latest = remember { HashMap<String, Act>() }
@@ -223,9 +235,14 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
 
     // ترجع صغيرة لحالها بعد شوي لو ما لمستها
     LaunchedEffect(expanded, top?.key, st.touchTick) {
-        if (expanded && P.autoCollapse.v && top?.kind != Kind.CALL_IN && top?.kind != Kind.NOTIF) {
+        val ringing = top?.kind == Kind.ALARM && top?.autoExpand == true
+        if (expanded && P.autoCollapse.v && top?.kind != Kind.CALL_IN && top?.kind != Kind.NOTIF && !ringing) {
             delay(7000); st.expanded = false
         }
+    }
+    // لوحة السطوع والصوت: لو صغّرتها تختفي (ما لها شكل صغير)
+    LaunchedEffect(expanded, top?.key) {
+        if (!expanded && top?.kind == Kind.CONTROLS) { delay(450); if (!st.expanded) Quick.hide() }
     }
 
     val face = Face(if (top == null) 0 else if (expanded) 2 else 1, top?.key ?: "")
@@ -310,7 +327,15 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
 
     // ───── النوافذ: وين اللمس ─────
     val pad = 4f * d
-    val touch: Rect? = if (hidden || off || alpha.value <= 0f && hidden) null else {
+    // مخفية: نخلي مكان صغير على الكاميرا بس (ضغطة = السطوع والصوت، سحب لتحت = الإشعارات)
+    val idleZone = hidden && !off && P.camTap.v && !st.fullscreen
+    val touch: Rect? = if (off) null else if (hidden) {
+        if (idleZone) {
+            val r = (maxOf(seed, 22f) / 2f + 6f) * d
+            val cy = (g.top() + H / 2f) * d
+            Rect((cx - r).roundToInt(), (cy - r).roundToInt().coerceAtLeast(0), (cx + r).roundToInt(), (cy + r).roundToInt())
+        } else null
+    } else {
         val r = Rect(
             (cx - tW / 2f - pad).roundToInt(), (tTop - pad).roundToInt(),
             (cx + tW / 2f + pad).roundToInt(), (tTop + tH + pad).roundToInt(),
@@ -331,7 +356,7 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
         busy || expanded -> fullH
         else -> ((g.top() + H + 10f) * d).roundToInt().coerceAtMost(fullH)
     }
-    SideEffect { onReq(IslandReq(drawH, touch, expanded)) }
+    SideEffect { onReq(IslandReq(drawH, touch, expanded, idle = hidden && touch != null)) }
 
     // ───── تأثير الزئبق (يشتغل بس وقت الانفصال والالتحام) ─────
     val goo = remember(d) { gooEffect(d) }
@@ -455,8 +480,13 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                             onDragEnd = {
                                 val a = cur ?: return@detectDragGestures
                                 if (abs(dx) > abs(dy)) {
-                                    // يمين/يسار = التطبيق اللي بعده
-                                    if (abs(dx) > 50f) switchBy(if (dx < 0) 1 else -1)
+                                    // على الأغنية: يسار = الجاية، يمين = اللي قبلها. غير كذا: التطبيق اللي بعده
+                                    val c = a.controls
+                                    if (abs(dx) > 50f) {
+                                        if (a.kind == Kind.MEDIA && P.swipeSong.v && c?.next != null) {
+                                            buzz(); if (dx < 0) c?.next?.invoke() else c?.prev?.invoke()
+                                        } else switchBy(if (dx < 0) 1 else -1)
+                                    }
                                 } else if (dy < -40f) {
                                     if (isExp) st.expanded = false else Hub.dismiss(a.key)
                                 } else if (dy > 40f && !isExp && a.kind != Kind.PREVIEW) {
@@ -590,6 +620,8 @@ private fun Art(bmp: Bitmap, size: Dp, corner: Dp, playing: Boolean) {
 
 private fun tint(a: Act): Color = Color(
     when {
+        a.kind == Kind.RECORD || a.kind == Kind.MISSED -> Accents.RED
+        a.kind == Kind.ALARM -> Accents.ORANGE
         a.accent != 0 && !(a.kind == Kind.MEDIA && !P.mediaArtColor.v) -> a.accent
         a.kind == Kind.CALL_IN || a.kind == Kind.CALL_ON -> Accents.GREEN
         a.kind == Kind.TIMER -> Accents.ORANGE
@@ -618,6 +650,10 @@ private fun glyph(a: Act): ImageVector = when (a.kind) {
     Kind.VOLUME -> Icons.AutoMirrored.Rounded.VolumeUp
     Kind.GREETING -> Icons.Rounded.WavingHand
     Kind.PREVIEW -> Icons.Rounded.AutoAwesome
+    Kind.RECORD -> Icons.Rounded.FiberManualRecord
+    Kind.MISSED -> Icons.Rounded.PhoneMissed
+    Kind.ALARM -> Icons.Rounded.Alarm
+    Kind.CONTROLS -> Icons.Rounded.Tune
 }
 
 // ───────────── الوقت ─────────────
@@ -673,8 +709,11 @@ private fun Compact(a: Act, g: Geo) {
 @Composable
 private fun Lead(a: Act, size: Dp) {
     val icon = a.icon
-    val photoKinds = a.kind == Kind.MEDIA || a.kind == Kind.NOTIF || a.kind == Kind.PROGRESS || a.kind == Kind.ONGOING
-    if (icon != null && a.kind == Kind.MEDIA) {
+    val photoKinds = a.kind == Kind.MEDIA || a.kind == Kind.NOTIF || a.kind == Kind.PROGRESS || a.kind == Kind.ONGOING ||
+        a.kind == Kind.MISSED
+    if (a.kind == Kind.RECORD) {
+        RecDot(size)
+    } else if (icon != null && a.kind == Kind.MEDIA) {
         Art(icon, size, size * 0.28f, a.playing)
     } else if (icon != null && photoKinds) {
         Image(
@@ -697,10 +736,13 @@ private fun Trail(a: Act, H: Float, maxW: Float) {
     }
     when (a.kind) {
         Kind.MEDIA -> Wave(c, a.playing && P.mediaWave.v, (H * 0.5f).dp)
-        Kind.CALL_ON, Kind.TIMER -> {
+        Kind.CALL_ON, Kind.TIMER, Kind.RECORD -> {
             val now = rememberNow(a.chrono > 0)
             txt(chronoText(a, now), c)
         }
+        Kind.MISSED -> Icon(Icons.Rounded.PhoneMissed, null, tint = c, modifier = Modifier.size((H * 0.5f).dp))
+        Kind.ALARM -> txt(a.text.ifEmpty { a.title }, c)
+        Kind.CONTROLS -> Unit
         Kind.CALL_IN -> txt(a.title.substringBefore(' '), Color.White)
         Kind.PROGRESS -> if (a.indeterminate || a.progress < 0) Ring(-1f, c, (H * 0.55f).dp) else Ring(a.progress, c, (H * 0.55f).dp)
         Kind.CHARGE, Kind.UNPLUG, Kind.BATTERY_LOW -> txt(a.text, c)
@@ -839,7 +881,8 @@ private fun Expanded(a: Act, g: Geo, st: IslandState, picks: List<Act>) {
             when (a.kind) {
                 Kind.MEDIA -> MediaFull(a, st)
                 Kind.CALL_IN, Kind.CALL_ON -> CallFull(a)
-                Kind.TIMER -> TimerFull(a)
+                Kind.TIMER, Kind.RECORD -> TimerFull(a)
+                Kind.CONTROLS -> QuickFull(st)
                 Kind.TORCH -> TorchFull(a, st)
                 else -> GenericFull(a)
             }
@@ -1075,7 +1118,7 @@ private fun TimerFull(a: Act) {
     val now = rememberNow(a.chrono > 0)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(46.dp).clip(CircleShape).background(c.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Timer, null, tint = c, modifier = Modifier.size(26.dp))
+            if (a.kind == Kind.RECORD) RecDot(30.dp) else Icon(Icons.Rounded.Timer, null, tint = c, modifier = Modifier.size(26.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -1129,4 +1172,74 @@ private fun Pulse(c: Color) {
     LaunchedEffect(Unit) { while (true) { on = !on; delay(700) } }
     val a by animateFloatAsState(if (on) 0.9f else 0.35f, tween(700), label = "pulse")
     Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(c.copy(alpha = a)))
+}
+
+/** نقطة التسجيل الحمرا: تنبض (وتثبت وقت توفير البطارية) */
+@Composable
+private fun RecDot(size: Dp) {
+    val still = LocalSaver.current
+    val pulse = rememberInfiniteTransition(label = "rec")
+    val a by pulse.animateFloat(1f, 0.3f, infiniteRepeatable(tween(750), RepeatMode.Reverse), label = "recA")
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(size * 0.6f).graphicsLayer { alpha = if (still) 1f else a }.clip(CircleShape).background(Color(Accents.RED)))
+    }
+}
+
+/** لوحة السطوع والصوت */
+@Composable
+private fun QuickFull(st: IslandState) {
+    val ctx = LocalContext.current
+    val c = Color(Accents.current)
+    val can = remember { Quick.canWrite(ctx) }
+    var bright by remember { mutableFloatStateOf(Quick.brightness(ctx)) }
+    var auto by remember { mutableStateOf(Quick.autoBrightness(ctx)) }
+    var vol by remember { mutableFloatStateOf(Quick.volume(ctx)) }
+    fun used() { st.touchTick++; Quick.bump() }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(t("التحكم السريع", "Quick controls"), style = ts(15.5f, FontWeight.Bold), modifier = Modifier.weight(1f))
+        if (can) {
+            Box(
+                Modifier.clip(RoundedCornerShape(50))
+                    .background(if (auto) c.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.1f))
+                    .clickable { auto = !auto; Quick.setAuto(ctx, auto); used() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) { Text(t("سطوع تلقائي", "Auto brightness"), style = ts(12.5f, FontWeight.Medium, if (auto) Color.White else Gray)) }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    LevelSlider(Icons.Rounded.LightMode, bright, c, enabled = can) {
+        bright = it; auto = false; Quick.setBrightness(ctx, it); used()
+    }
+    if (!can) {
+        Spacer(Modifier.height(4.dp))
+        Box(
+            Modifier.fillMaxWidth().height(36.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.13f))
+                .clickable { Quick.askWrite(ctx) },
+            contentAlignment = Alignment.Center,
+        ) { Text(t("اسمح بتغيير السطوع", "Allow brightness control"), style = ts(13f, FontWeight.Medium)) }
+    }
+    Spacer(Modifier.height(8.dp))
+    LevelSlider(Icons.AutoMirrored.Rounded.VolumeUp, vol, c) {
+        vol = it; Quick.setVolume(ctx, it); used()
+    }
+}
+
+@Composable
+private fun LevelSlider(icon: ImageVector, value: Float, c: Color, enabled: Boolean = true, onChange: (Float) -> Unit) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = if (enabled) Color.White else Gray, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Slider(
+                value = value, onValueChange = onChange, enabled = enabled,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White, activeTrackColor = c, inactiveTrackColor = Color.White.copy(alpha = 0.2f),
+                    disabledThumbColor = Gray, disabledActiveTrackColor = Gray.copy(alpha = 0.5f),
+                    disabledInactiveTrackColor = Color.White.copy(alpha = 0.1f),
+                ),
+                modifier = Modifier.weight(1f).height(28.dp),
+            )
+        }
+    }
 }

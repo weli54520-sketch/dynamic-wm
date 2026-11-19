@@ -27,7 +27,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.FiberManualRecord
 import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bluetooth
@@ -223,8 +225,8 @@ fun HomeScreen(act: MainActivity, wide: Boolean) {
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                t("ضغطة: تكبير · ضغطة طويلة: تفتح التطبيق · سحب لفوق: إخفاء · سحب لتحت: تكبير · يمين ويسار: تبديل",
-                    "Tap: expand · Long press: open app · Swipe up: hide · Swipe down: expand · Sideways: switch"),
+                t("ضغطة: تكبير · ضغطة طويلة: تفتح التطبيق · سحب لفوق: إخفاء · سحب لتحت: تكبير · يمين ويسار: تبديل أو الأغنية الجاية · ضغطة على الكاميرا: السطوع والصوت",
+                    "Tap: expand · Long press: open app · Swipe up: hide · Swipe down: expand · Sideways: switch or next song · Tap camera: brightness & volume"),
                 style = ts(12.5f, color = Faint),
             )
         }
@@ -258,6 +260,8 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
                 Sub { ToggleRow(null, cPink, t("الكبسولة المكبرة بلون الغلاف", "Expanded island in artwork color"), t("بدل الأسود", "Instead of black"), P.mediaTintBg) }
                 Sub { ToggleRow(null, cPink, t("الغلاف يدور", "Spinning artwork"), t("مثل الأسطوانة وقت التشغيل", "Like a record while playing"), P.mediaArtSpin) }
                 Sub { ToggleRow(null, cPink, t("أخفيها لما يكون تطبيق الموسيقى مفتوح", "Hide while the music app is open"), pref = P.mediaHideOpen) }
+                Sub { ToggleRow(null, cPink, t("السحب يمين ويسار يغيّر الأغنية", "Swipe sideways to change song"),
+                    t("يسار: الجاية · يمين: اللي قبلها", "Left: next · Right: previous"), P.swipeSong) }
                 Sub {
                     SliderRow(t("تختفي بعد الإيقاف", "Hide after pause"), P.mediaKeep.v.toFloat(), 0f..60f,
                         if (P.mediaKeep.v == 0) t("فوراً", "Instantly") else t("${P.mediaKeep.v} ث", "${P.mediaKeep.v}s")) {
@@ -270,7 +274,13 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
                 ToggleRow(null, cGreen, t("أزرار الرد والإنهاء", "Answer / end buttons"),
                     t("طفها إذا تعارضت مع تطبيق الاتصال", "Turn off if it conflicts with your dialer"), P.callControls, enabled = P.call.v)
             }
+            Sub {
+                ToggleRow(null, cRed, t("المكالمات الفايتة", "Missed calls"),
+                    t("تبقى لين تمسحها، وفيها زر الاتصال", "Stays until cleared, with a call back button"), P.missed)
+            }
             ToggleRow(Icons.Rounded.Timer, cOrange, t("المؤقت والساعة", "Timers"), t("المؤقت وساعة الإيقاف والتسجيل", "Timer, stopwatch and recorders"), P.timer)
+            ToggleRow(Icons.Rounded.Alarm, cOrange, t("المنبه", "Alarms"), t("وقت ما يرن يكبر وفيه إيقاف وغفوة", "Expands while ringing, with dismiss and snooze"), P.alarm)
+            ToggleRow(Icons.Rounded.FiberManualRecord, cRed, t("التسجيل", "Recording"), t("تسجيل الشاشة والصوت: نقطة حمرا وعداد", "Screen and voice recording: red dot and timer"), P.record)
             ToggleRow(Icons.Rounded.Navigation, cBlue, t("الخرائط", "Navigation"), t("الاتجاهات من تطبيقات الخرائط", "Directions from maps apps"), P.nav)
             ToggleRow(Icons.Rounded.Download, cCyan, t("التحميل والتقدم", "Downloads & progress"), t("أي تحميل أو رفع فيه نسبة", "Any download or upload"), P.progress)
             ToggleRow(Icons.Rounded.Sync, cPurple, t("التطبيقات بالخلفية", "Background apps"), t("أي تطبيق شغال بالخلفية يطلع لحاله", "Apps running in the background"), P.ongoing)
@@ -427,9 +437,11 @@ fun LookScreen(wide: Boolean) {
                 P.tapAction.v = if (it == 1) "open" else "expand"
             }
             Spacer(Modifier.height(4.dp))
-            Text(t("الضغطة الطويلة تسوي العكس. والسحب يمين ويسار يبدّل بين التطبيقات.",
-                "Long press does the other. Swipe sideways to switch apps."), style = ts(12.5f, color = Faint))
+            Text(t("الضغطة الطويلة تسوي العكس. والسحب يمين ويسار يبدّل بين التطبيقات (وعلى الأغنية يغيّرها).",
+                "Long press does the other. Swipe sideways to switch apps (or change the song)."), style = ts(12.5f, color = Faint))
             Spacer(Modifier.height(6.dp))
+            ToggleRow(null, Color.White, t("ضغطة على الكاميرا", "Tap the camera"),
+                t("والجزيرة مخفية: السطوع والصوت. والسحب لتحت منها يفتح الإشعارات", "When hidden: brightness and volume. Swipe down from it for notifications"), P.camTap)
             ToggleRow(null, Color.White, t("إخفاء بالوضع الأفقي", "Hide in landscape"), pref = P.hideLandscape)
             ToggleRow(null, Color.White, t("إخفاء وقت ملء الشاشة", "Hide in full screen"),
                 t("الفيديو والألعاب. المكالمة الواردة تطلع برضو", "Videos and games. Incoming calls still show"), P.hideFullscreen)

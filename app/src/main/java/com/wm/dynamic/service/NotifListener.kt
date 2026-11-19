@@ -50,6 +50,9 @@ class NotifListener : NotificationListenerService() {
     /** مفاتيح الموسيقى المعروضة الحين (media:<الحزمة>) */
     private val mediaKeys = HashSet<String>()
 
+    /** متى بدأ التسجيل (للمسجلات اللي ما ترسل عداد) */
+    private val recStart = HashMap<String, Long>()
+
     /** آخر محتوى انعرض لكل إشعار (بدون الأرقام) عشان التحديثات ما تفتح الجزيرة كل ثانية */
     private val shown = HashMap<String, String>()
 
@@ -82,6 +85,7 @@ class NotifListener : NotificationListenerService() {
             Hub.remove("n:" + sbn.key)
             Hub.remove("nb:" + sbn.key)
             shown.remove(sbn.key)
+            recStart.remove(sbn.key)
         } catch (_: Exception) {}
     }
 
@@ -163,22 +167,54 @@ class NotifListener : NotificationListenerService() {
             return
         }
 
-        // 2) الخرائط
+        // 2) مكالمة فايتة: تبقى لين تنمسح من الإشعارات، وفيها أزرار الإشعار (اتصال، رسالة)
+        if (isMissed(pkg, n, title, text)) {
+            Hub.remove("nb:" + sbn.key)
+            if (!blocked) {
+                Hub.put(Act(key, Kind.MISSED, Pri.MISSED, title = title.ifEmpty { app },
+                    text = text.ifEmpty { t("مكالمة فائتة", "Missed call") }, app = app, pkg = pkg, icon = largeIcon(n),
+                    controls = Controls(open = open, actions = buttons(n))))
+            }
+            return
+        }
+
+        // 3) تسجيل الشاشة أو الصوت (مسجل سامسونج يرسل إشعاره كأنه خرائط، فنمسكه قبلها)
+        if (ongoing && isRecorder(pkg, title, n)) {
+            val clock = listOf(text, title).firstOrNull { TIME.matches(it) }.orEmpty()
+            val start = when {
+                chrono -> n.`when`
+                clock.isNotEmpty() -> 0L // العداد من الإشعار نفسه
+                else -> recStart.getOrPut(sbn.key) { System.currentTimeMillis() }
+            }
+            Hub.put(Act(key, Kind.RECORD, Pri.RECORD, title = if (TIME.matches(title)) app else title.ifEmpty { app },
+                text = clock, app = app, pkg = pkg, chrono = start, controls = Controls(open = open, actions = buttons(n))))
+            return
+        }
+
+        // 4) المنبه: وقت ما يرن يكبر لحاله مع أزراره (إيقاف، غفوة)
+        val isClock = pkg in CLOCKS
+        if (!chrono && (n.category == Notification.CATEGORY_ALARM || (isClock && (n.channelId ?: "").contains("alarm", ignoreCase = true)))) {
+            val ringing = n.fullScreenIntent != null || ongoing
+            Hub.put(Act(key, Kind.ALARM, if (ringing) Pri.ALARM_RING else Pri.ALARM, title = title.ifEmpty { t("المنبه", "Alarm") },
+                text = text, app = app, pkg = pkg, autoExpand = ringing, controls = Controls(open = open, actions = buttons(n))))
+            return
+        }
+
+        // 5) الخرائط
         if (n.category == "navigation" && ongoing) {
             Hub.put(Act(key, Kind.NAV, Pri.NAV, title = title, text = text, app = app, pkg = pkg,
                 icon = Apps.icon(this, pkg), accent = color, controls = Controls(open = open, actions = buttons(n))))
             return
         }
 
-        // 3) المؤقت والساعة
-        val isClock = pkg in CLOCKS
+        // 6) المؤقت والساعة
         if ((chrono && ongoing) || (isClock && ongoing)) {
             Hub.put(Act(key, Kind.TIMER, Pri.TIMER, title = title.ifEmpty { app }, text = text, app = app, pkg = pkg,
                 chrono = if (chrono) n.`when` else 0L, countDown = countDown, controls = Controls(open = open, actions = buttons(n))))
             return
         }
 
-        // 4) التحميل والتقدم
+        // 7) التحميل والتقدم
         val max = ex.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
         val prog = ex.getInt(Notification.EXTRA_PROGRESS, 0)
         val indet = ex.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE)
@@ -192,7 +228,7 @@ class NotifListener : NotificationListenerService() {
         }
         Hub.remove(key)
 
-        // 5) التطبيقات اللي تشتغل بالخلفية
+        // 8) التطبيقات اللي تشتغل بالخلفية
         if (ongoing) {
             if (!blocked && pkg !in SYSTEM && importance(sbn) > 1 && (title.isNotEmpty() || text.isNotEmpty())) {
                 Hub.put(Act(key, Kind.ONGOING, Pri.ONGOING, title = title.ifEmpty { app }, text = text, app = app, pkg = pkg,
@@ -201,7 +237,7 @@ class NotifListener : NotificationListenerService() {
             return
         }
 
-        // 6) الإشعارات العادية (تطلع شوي وتختفي)
+        // 9) الإشعارات العادية (تطلع شوي وتختفي)
         if (initial || blocked || !P.notif.v) return
         if (flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (title.isEmpty() && text.isEmpty()) return
@@ -224,6 +260,21 @@ class NotifListener : NotificationListenerService() {
                 accent = color, controls = Controls(open = open)),
             P.notifSec.v.coerceIn(2, 15) * 1000L,
         )
+    }
+
+    private fun isMissed(pkg: String, n: Notification, title: String, text: String): Boolean {
+        if (n.category == "missed_call") return true
+        if ((n.channelId ?: "").contains("missed", ignoreCase = true)) return true
+        val p = pkg.lowercase()
+        if (DIALERS.none { p.contains(it) }) return false
+        return MISSED_WORDS.any { title.contains(it, ignoreCase = true) || text.contains(it, ignoreCase = true) }
+    }
+
+    private fun isRecorder(pkg: String, title: String, n: Notification): Boolean {
+        val p = pkg.lowercase()
+        if (RECORDERS.any { p.contains(it) }) return true
+        if ((n.channelId ?: "").contains("record", ignoreCase = true)) return true
+        return REC_WORDS.any { title.contains(it, ignoreCase = true) }
     }
 
     // ───────────── الموسيقى ─────────────
@@ -425,6 +476,12 @@ class NotifListener : NotificationListenerService() {
         private val CLOCKS = setOf(
             "com.sec.android.app.clockpackage", "com.google.android.deskclock", "com.android.deskclock",
         )
+        private val DIALERS = listOf("dialer", "incallui", "contacts", "telecom", ".phone")
+        private val MISSED_WORDS = listOf("فائت", "فايت", "missed", "لم يتم الرد")
+        private val RECORDERS = listOf("screenrecord", "screen_record", "smartcapture", "voicenote", "recorder")
+        private val REC_WORDS = listOf("تسجيل الشاشة", "مسجل الشاشة", "screen record", "جاري التسجيل", "جارٍ التسجيل", "recording")
+        /** عداد مثل 00:12 أو 1:02:33 (بالأرقام العربية أو الإنجليزية) */
+        private val TIME = Regex("[0-9\u0660-\u0669]{1,2}(:[0-9\u0660-\u0669]{2}){1,2}")
         private val DIGITS = Regex("[0-9\u0660-\u0669:.,٫%]")
         private val SYSTEM = setOf("android", "com.android.systemui", "com.android.providers.downloads.ui")
     }

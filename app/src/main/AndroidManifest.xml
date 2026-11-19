@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- تغيير السطوع من لوحة الجزيرة (المستخدم يسمح فيها من الإعدادات) -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <!-- تحديث التطبيق من داخله -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -23,6 +25,11 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- الشاشة الرئيسية (عشان نعرف إنك طلعت من التطبيق) -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
         </intent>
     </queries>
 

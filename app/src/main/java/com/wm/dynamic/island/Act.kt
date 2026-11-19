@@ -5,7 +5,15 @@ import android.graphics.Bitmap
 /** نوع النشاط اللي تعرضه الجزيرة */
 enum class Kind {
     CALL_IN, CALL_ON, MEDIA, TIMER, NAV, PROGRESS, ONGOING, NOTIF,
-    CHARGE, UNPLUG, BATTERY_LOW, BT, HEADSET, RINGER, TORCH, DND, UNLOCK, VOLUME, GREETING, PREVIEW
+    CHARGE, UNPLUG, BATTERY_LOW, BT, HEADSET, RINGER, TORCH, DND, UNLOCK, VOLUME, GREETING, PREVIEW,
+    /** تسجيل الشاشة أو الصوت: نقطة حمرا + عداد */
+    RECORD,
+    /** مكالمة فايتة: تبقى لين تنمسح من الإشعارات */
+    MISSED,
+    /** المنبه: يرن (يكبر لحاله) أو الجاي */
+    ALARM,
+    /** لوحة السطوع والصوت (ضغطة على الكاميرا) */
+    CONTROLS,
 }
 
 /** أزرار التحكم (اللي ما يدعمها النشاط تكون null) */
@@ -64,11 +72,16 @@ data class Act(
 
 object Pri {
     const val CALL_IN = 100
+    const val ALARM_RING = 97
     const val CALL_ON = 95
     const val NOTIF = 90
+    const val CONTROLS = 92
     const val EVENT = 85
     const val NAV = 80
+    const val RECORD = 75
     const val TIMER = 70
+    const val ALARM = 69
+    const val MISSED = 65
     const val MEDIA = 60
     const val PROGRESS = 50
     const val TORCH = 40

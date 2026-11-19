@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -108,10 +109,12 @@ fun IconBadge(icon: ImageVector, color: Color, size: Int = 40) {
 @Composable
 fun Toggle(checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     val acc = accentColor()
+    // لون فاتح (الأبيض أو الأصفر): الدائرة تصير غامقة، وإلا تختفي في المفتاح
+    val thumb = if (acc.luminance() > 0.6f) Color(0xFF1C1C1E) else White
     Switch(
         checked = checked, onCheckedChange = onChange, enabled = enabled,
         colors = SwitchDefaults.colors(
-            checkedThumbColor = White, checkedTrackColor = acc, checkedBorderColor = acc,
+            checkedThumbColor = thumb, checkedTrackColor = acc, checkedBorderColor = acc,
             uncheckedThumbColor = Color(0xFFD4D4D8), uncheckedTrackColor = Color(0x33FFFFFF), uncheckedBorderColor = Color(0x55FFFFFF),
         ),
     )

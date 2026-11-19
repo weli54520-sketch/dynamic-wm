@@ -27,6 +27,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.wm.dynamic.core.Prefs
+import com.wm.dynamic.service.IslandAccessibility
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -180,6 +181,8 @@ class IslandHost(private val ctx: Context, private val type: Int) {
 
     /** نرسل اللمسة لنافذة الرسم بنفس مكانها على الشاشة */
     private fun forward(ev: MotionEvent) {
+        // الجزيرة مخفية: المكان اللي على الكاميرا بس
+        if (req.idle) { idleTouch(ev); return }
         val cv = compose ?: return
         val t = touchRoot ?: return
         val a = IntArray(2); val b = IntArray(2)
@@ -190,6 +193,26 @@ class IslandHost(private val ctx: Context, private val type: Int) {
             cv.dispatchTouchEvent(e)
         } catch (_: Exception) {
         } finally { e.recycle() }
+    }
+
+    private var downX = 0f
+    private var downY = 0f
+    private var downT = 0L
+
+    /** ضغطة على الكاميرا = لوحة السطوع والصوت. سحب لتحت منها = الإشعارات */
+    private fun idleTouch(ev: MotionEvent) {
+        val d = state.geo.density
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> { downX = ev.rawX; downY = ev.rawY; downT = ev.eventTime }
+            MotionEvent.ACTION_UP -> {
+                val dx = ev.rawX - downX
+                val dy = ev.rawY - downY
+                when {
+                    dy > 22f * d && dy > kotlin.math.abs(dx) -> IslandAccessibility.openNotifications()
+                    kotlin.math.abs(dx) < 14f * d && kotlin.math.abs(dy) < 14f * d && ev.eventTime - downT < 500 -> Quick.show()
+                }
+            }
+        }
     }
 
     private fun relayout() {

@@ -80,7 +80,10 @@ object Hub {
         Kind.DND -> P.evDnd.v
         Kind.UNLOCK -> P.evUnlock.v
         Kind.VOLUME -> P.evVolume.v
-        Kind.GREETING, Kind.PREVIEW -> true
+        Kind.RECORD -> P.record.v
+        Kind.MISSED -> P.missed.v
+        Kind.ALARM -> P.alarm.v
+        Kind.GREETING, Kind.PREVIEW, Kind.CONTROLS -> true
     }
 
     private fun publish() {

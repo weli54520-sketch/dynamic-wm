@@ -1,7 +1,9 @@
 package com.wm.dynamic.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -48,10 +50,27 @@ class IslandAccessibility : AccessibilityService() {
         if (!e.isFullScreen) return
         val p = e.packageName?.toString() ?: return
         if (p == "com.android.systemui" || p == packageName) return
+        // نوافذ النظام (عد تنازلي حق مسجل الشاشة، الكيبورد ...) مو تطبيق فتحته:
+        // لو حسبناها، الجزيرة تحسب إنك طلعت من التطبيق وترجع تطلع وأنت داخله
+        if (!isRealApp(p)) return
         if (Hub.foregroundPkg != p) {
             Hub.foregroundPkg = p
             Hub.refresh()
         }
+    }
+
+    private val realApps = HashMap<String, Boolean>()
+    private var home: String? = null
+
+    /** تطبيق حقيقي = له أيقونة في قائمة التطبيقات، أو الشاشة الرئيسية */
+    private fun isRealApp(p: String): Boolean = realApps.getOrPut(p) {
+        if (OVERLAYS.any { p.contains(it, ignoreCase = true) }) return@getOrPut false
+        if (home == null) home = try {
+            packageManager.resolveActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY,
+            )?.activityInfo?.packageName
+        } catch (_: Exception) { null }
+        p == home || try { packageManager.getLaunchIntentForPackage(p) != null } catch (_: Exception) { true }
     }
 
     override fun onInterrupt() {}
@@ -70,5 +89,11 @@ class IslandAccessibility : AccessibilityService() {
 
     companion object {
         @Volatile var instance: IslandAccessibility? = null
+        private val OVERLAYS = listOf("screenrecord", "smartcapture", "inputmethod", "honeyboard", "keyboard")
+
+        /** يفتح لوحة الإشعارات (السحب لتحت من الكاميرا) */
+        fun openNotifications(): Boolean = try {
+            instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS) == true
+        } catch (_: Exception) { false }
     }
 }
