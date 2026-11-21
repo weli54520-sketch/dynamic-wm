@@ -10,6 +10,13 @@ import androidx.compose.material.icons.rounded.FiberManualRecord
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.PhoneMissed
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Pets
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.platform.LocalContext
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -206,9 +213,19 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
     val scope = rememberCoroutineScope()
 
     // ملء الشاشة (فيديو، ألعاب): نخفيها، إلا المكالمة الواردة
-    val acts = if (st.fullscreen && P.hideFullscreen.v) all.filter {
+    val acts0 = if (st.fullscreen && P.hideFullscreen.v) all.filter {
         it.kind == Kind.CALL_IN || it.kind == Kind.CONTROLS || (it.kind == Kind.ALARM && it.autoExpand)
     } else all
+    // الحيوان الصغير: يطلع بس لما ما فيه أي شي ثاني (ما يصير دائرة جانبية)
+    val petOn = P.pet.v && acts0.isEmpty() && !st.fullscreen && SystemClock.uptimeMillis() >= Pet.hideUntil
+    val acts = if (petOn) listOf(PET_ACT) else acts0
+    // أي نشاط جديد يصحّي الحيوان
+    val sig = all.joinToString(",") { it.key }
+    LaunchedEffect(sig) { if (sig.isNotEmpty()) Pet.poke() }
+    LaunchedEffect(Pet.hideUntil) {
+        val left = Pet.hideUntil - SystemClock.uptimeMillis()
+        if (left > 0) { delay(left); Pet.hideUntil = 0L }
+    }
 
     // نحفظ آخر نسخة من كل نشاط عشان حركة الرجوع تلقى شي ترسمه
     val latest = remember { HashMap<String, Act>() }
@@ -364,7 +381,8 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
         (slotA.sep.isRunning || slotB.sep.isRunning || aFan.isRunning)
 
     // ───── اللون واللمعة ─────
-    val glowTarget = if (P.glow.v && top != null && top.kind != Kind.PREVIEW) tint(top).copy(alpha = 0.7f) else Color.Transparent
+    val glowTarget = if (P.glow.v && top != null && top.kind != Kind.PREVIEW && top.kind != Kind.PET && top.kind != Kind.ASSIST)
+        tint(top).copy(alpha = 0.7f) else Color.Transparent
     val glow by animateColorAsState(glowTarget, tween(300), label = "glow")
     // الكبسولة المكبرة بلون غلاف الأغنية
     val tintTarget = when {
@@ -458,6 +476,7 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                             onTap = {
                                 val a = cur ?: return@detectTapGestures
                                 if (a.kind == Kind.PREVIEW) return@detectTapGestures
+                                if (a.kind == Kind.PET) { buzz(); Pet.poke(); return@detectTapGestures }
                                 when {
                                     isExp -> { a.controls?.open?.invoke(); st.expanded = false }
                                     P.tapAction.v == "open" -> { buzz(); a.controls?.open?.invoke() }
@@ -467,6 +486,7 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                             onLongPress = {
                                 val a = cur ?: return@detectTapGestures
                                 if (a.kind == Kind.PREVIEW) return@detectTapGestures
+                                if (a.kind == Kind.PET) { buzz(); Quick.show(); return@detectTapGestures }
                                 buzz()
                                 if (!isExp && P.tapAction.v == "open") st.expanded = true
                                 else { a.controls?.open?.invoke(); st.expanded = false }
@@ -488,8 +508,10 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                                         } else switchBy(if (dx < 0) 1 else -1)
                                     }
                                 } else if (dy < -40f) {
-                                    if (isExp) st.expanded = false else Hub.dismiss(a.key)
-                                } else if (dy > 40f && !isExp && a.kind != Kind.PREVIEW) {
+                                    // الحيوان: سحب لفوق = يروح ينام ساعة
+                                    if (a.kind == Kind.PET) Pet.hideUntil = SystemClock.uptimeMillis() + 3_600_000L
+                                    else if (isExp) st.expanded = false else Hub.dismiss(a.key)
+                                } else if (dy > 40f && !isExp && a.kind != Kind.PREVIEW && a.kind != Kind.PET) {
                                     buzz(); st.expanded = true
                                 }
                             },
@@ -509,15 +531,23 @@ fun IslandView(st: IslandState, fullH: Int, onReq: (IslandReq) -> Unit) {
                         contentAlignment = Alignment.TopCenter,
                         label = "face",
                     ) { f ->
-                        val a = latest[f.key]
+                        val a = latest[f.key] ?: if (f.key == PET_ACT.key) PET_ACT else null
                         when {
                             f.mode == 0 || a == null -> IdleBox(g, keepIdle, appear)
+                            f.mode == 1 && a.kind == Kind.PET -> PetFace(g)
                             f.mode == 1 -> Compact(a, g)
                             else -> Expanded(a, g, st, pickList)
                         }
                     }
                 }
             }
+
+            // 3) فوق الشكل: حلقة المؤقت، وتوهج المساعد
+            val t0 = top
+            if (t0 != null && !expanded && t0.kind == Kind.TIMER && t0.countDown && t0.chrono > 0 && P.timerRing.v) {
+                TimerRing(t0, aw, ah, aTop, aCorner, cx)
+            }
+            if (t0 != null && t0.kind == Kind.ASSIST) AssistHalo(aw, ah, aTop, aCorner, cx, saver)
 
             // 3) محتوى الدوائر الجانبية (الأولى، وبعدها الثانية فوقها)
             listOf(slotA, slotB).forEach { s ->
@@ -654,6 +684,9 @@ private fun glyph(a: Act): ImageVector = when (a.kind) {
     Kind.MISSED -> Icons.Rounded.PhoneMissed
     Kind.ALARM -> Icons.Rounded.Alarm
     Kind.CONTROLS -> Icons.Rounded.Tune
+    Kind.ASSIST -> Icons.Rounded.AutoAwesome
+    Kind.PRIVACY -> if (a.level and 1 != 0) Icons.Rounded.Videocam else Icons.Rounded.Mic
+    Kind.PET -> Icons.Rounded.Pets
 }
 
 // ───────────── الوقت ─────────────
@@ -713,6 +746,10 @@ private fun Lead(a: Act, size: Dp) {
         a.kind == Kind.MISSED
     if (a.kind == Kind.RECORD) {
         RecDot(size)
+    } else if (a.kind == Kind.BATTERY_LOW) {
+        BatteryAnim(a.level, size)
+    } else if (a.kind == Kind.PRIVACY) {
+        PrivacyDots(a.level, size)
     } else if (icon != null && a.kind == Kind.MEDIA) {
         Art(icon, size, size * 0.28f, a.playing)
     } else if (icon != null && photoKinds) {
@@ -744,8 +781,12 @@ private fun Trail(a: Act, H: Float, maxW: Float) {
         Kind.ALARM -> txt(a.text.ifEmpty { a.title }, c)
         Kind.CONTROLS -> Unit
         Kind.CALL_IN -> txt(a.title.substringBefore(' '), Color.White)
-        Kind.PROGRESS -> if (a.indeterminate || a.progress < 0) Ring(-1f, c, (H * 0.55f).dp) else Ring(a.progress, c, (H * 0.55f).dp)
-        Kind.CHARGE, Kind.UNPLUG, Kind.BATTERY_LOW -> txt(a.text, c)
+        Kind.PROGRESS -> if (a.chip.isNotEmpty()) txt(a.chip, c) else if (a.indeterminate || a.progress < 0) Ring(-1f, c, (H * 0.55f).dp) else Ring(a.progress, c, (H * 0.55f).dp)
+        Kind.CHARGE, Kind.UNPLUG -> txt(a.text, c)
+        Kind.BATTERY_LOW -> txt(if (a.level >= 0) "${a.level}%" else a.text, c)
+        Kind.ASSIST -> Wave(c, true, (H * 0.5f).dp)
+        Kind.PRIVACY -> txt(a.title, c)
+        Kind.PET -> Unit
         Kind.VOLUME -> LevelBar(a.level / 100f, c, Modifier.width((maxW * 0.8f).coerceAtMost(48f).dp).height((H * 0.18f).dp))
         Kind.UNLOCK -> Unit
         Kind.PREVIEW -> txt("WM", c)
@@ -883,6 +924,7 @@ private fun Expanded(a: Act, g: Geo, st: IslandState, picks: List<Act>) {
                 Kind.CALL_IN, Kind.CALL_ON -> CallFull(a)
                 Kind.TIMER, Kind.RECORD -> TimerFull(a)
                 Kind.CONTROLS -> QuickFull(st)
+                Kind.BATTERY_LOW -> BatteryFull(a)
                 Kind.TORCH -> TorchFull(a, st)
                 else -> GenericFull(a)
             }
@@ -1161,7 +1203,8 @@ private fun GenericFull(a: Act) {
     if (bar != null) {
         Spacer(Modifier.height(12.dp))
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            if (bar < 0f) Pulse(c) else LevelBar(bar, c, Modifier.fillMaxWidth().height(6.dp))
+            if (a.segments.isNotEmpty() && bar >= 0f) SegmentBar(a, bar, c)
+            else if (bar < 0f) Pulse(c) else LevelBar(bar, c, Modifier.fillMaxWidth().height(6.dp))
         }
     }
 }
@@ -1241,5 +1284,205 @@ private fun LevelSlider(icon: ImageVector, value: Float, c: Color, enabled: Bool
                 modifier = Modifier.weight(1f).height(28.dp),
             )
         }
+    }
+}
+
+// ───────────── v12 ─────────────
+
+/** الحيوان الصغير: نشاط وهمي يطلع بس لما الجزيرة فاضية */
+private val PET_ACT = Act("pet", Kind.PET, Pri.PET)
+
+object Pet {
+    /** آخر مرة صار فيه شي (إشعار، ضغطة): يصحى */
+    var poked by mutableLongStateOf(0L)
+    /** سحبه لفوق: يختفي لين هالوقت (uptime) */
+    var hideUntil by mutableLongStateOf(0L)
+    fun poke() { poked = System.currentTimeMillis() }
+}
+
+/** عيون ترمش وتلتفت، تنام لو ما صار شي دقيقة ونص (أو بالليل)، وتنفتح بقوة لما يصير شي */
+@Composable
+private fun PetFace(g: Geo) {
+    val H = g.compactH()
+    val side = (g.compactW() - g.gap()) / 2f
+    val now = rememberNow(true, 5000L)
+    val poked = Pet.poked
+    val fresh = System.currentTimeMillis() - poked < 2500
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    val asleep = !fresh && (now - poked > 90_000L || hour < 6)
+    val still = LocalSaver.current
+    var blink by remember { mutableStateOf(false) }
+    var look by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(asleep, still) {
+        look = 0f
+        if (asleep || still) return@LaunchedEffect
+        while (true) {
+            delay((2200L..5200L).random())
+            blink = true; delay(130); blink = false
+            if (Math.random() < 0.45) look = listOf(-1f, 0f, 1f).random()
+        }
+    }
+    // يرجع من "متفاجئ" لعادي بعد شوي
+    var surprise by remember { mutableStateOf(false) }
+    LaunchedEffect(poked) { if (fresh) { surprise = true; delay(1600); surprise = false } }
+    val open by animateFloatAsState(
+        when { asleep || blink -> 0.14f; surprise -> 1.25f; else -> 1f }, spring(0.55f, 500f), label = "eye",
+    )
+    val lx by animateFloatAsState(look, tween(380), label = "look")
+    Row(Modifier.size(g.compactW().dp, H.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(side.dp), contentAlignment = Alignment.CenterEnd) {
+            Eye(open, lx, (H * 0.62f).dp, Modifier.padding(end = (H * 0.25f).dp))
+        }
+        Spacer(Modifier.width(g.gap().dp))
+        Box(Modifier.width(side.dp), contentAlignment = Alignment.CenterStart) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eye(open, lx, (H * 0.62f).dp, Modifier.padding(start = (H * 0.25f).dp))
+                if (asleep) Text("z", style = ts(H * 0.32f, FontWeight.Bold, Gray), modifier = Modifier.padding(start = 4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Eye(open: Float, look: Float, size: Dp, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val ew = this.size.width * 0.42f
+        val eh = (this.size.height * 0.78f * open).coerceAtLeast(2f)
+        val x = (this.size.width - ew) / 2f + look * this.size.width * 0.16f
+        val y = (this.size.height - eh) / 2f
+        drawRoundRect(Color.White, Offset(x, y), Size(ew, eh), CornerRadius(ew / 2f, ew / 2f))
+    }
+}
+
+/** بطارية تنبض بالأحمر، وتعبيتها على قد النسبة */
+@Composable
+private fun BatteryAnim(level: Int, size: Dp, wide: Float = 1f) {
+    val still = LocalSaver.current
+    val pulse = rememberInfiniteTransition(label = "bat")
+    val a by pulse.animateFloat(1f, 0.35f, infiniteRepeatable(tween(650), RepeatMode.Reverse), label = "batA")
+    val red = Color(Accents.RED)
+    Canvas(Modifier.size(size * wide, size)) {
+        val w = this.size.width; val h = this.size.height
+        val bw = w * 0.86f; val bh = h * 0.52f
+        val top = (h - bh) / 2f
+        val sw = (h * 0.07f).coerceAtLeast(1.5f)
+        val r = bh * 0.28f
+        drawRoundRect(Color.White.copy(alpha = 0.85f), Offset(sw / 2f, top), Size(bw, bh), CornerRadius(r, r), style = Stroke(sw))
+        drawRoundRect(Color.White.copy(alpha = 0.85f), Offset(bw + sw, top + bh * 0.3f), Size(w * 0.07f, bh * 0.4f), CornerRadius(r / 2f, r / 2f))
+        val pad = sw * 1.6f
+        val fill = ((bw - pad * 2) * (level.coerceIn(3, 100) / 100f))
+        drawRoundRect(red.copy(alpha = if (still) 1f else a), Offset(sw / 2f + pad, top + pad), Size(fill, bh - pad * 2), CornerRadius(r / 2f, r / 2f))
+    }
+}
+
+@Composable
+private fun BatteryFull(a: Act) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BatteryAnim(a.level, 34.dp, wide = 1.8f)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(a.title, style = ts(16f, FontWeight.Bold))
+            Text(a.text, style = ts(13.5f, color = Color(0xFFD4D4D8)))
+        }
+        Text("${a.level.coerceAtLeast(0)}%", style = ts(22f, FontWeight.Bold, Color(Accents.RED)))
+    }
+}
+
+/** نقطة خضرا للكاميرا، وبرتقالية للمايك */
+@Composable
+private fun PrivacyDots(level: Int, size: Dp) {
+    Row(Modifier.height(size), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(size * 0.18f)) {
+        if (level and 1 != 0) Box(Modifier.size(size * 0.42f).clip(CircleShape).background(Color(Accents.GREEN)))
+        if (level and 2 != 0) Box(Modifier.size(size * 0.42f).clip(CircleShape).background(Color(Accents.ORANGE)))
+    }
+}
+
+/** شريط التحديثات الحية: كل مرحلة بلونها، والنقاط عليه، ودائرة بيضا وين وصلت */
+@Composable
+private fun SegmentBar(a: Act, progress: Float, c: Color) {
+    Canvas(Modifier.fillMaxWidth().height(14.dp)) {
+        val w = size.width; val h = 6.dp.toPx(); val y = (size.height - h) / 2f
+        val gap = 2.dp.toPx()
+        var x = 0f
+        a.segments.forEach { (len, col) ->
+            val sw = (w * len - gap).coerceAtLeast(1f)
+            val color = if (col != 0) Color(col) else c
+            drawRoundRect(color.copy(alpha = 0.3f), Offset(x, y), Size(sw, h), CornerRadius(h / 2f, h / 2f))
+            val filled = ((progress * w) - x).coerceIn(0f, sw)
+            if (filled > 0f) drawRoundRect(color, Offset(x, y), Size(filled, h), CornerRadius(h / 2f, h / 2f))
+            x += w * len
+        }
+        a.points.forEach { (pos, col) ->
+            drawCircle(if (col != 0) Color(col) else c, 4.dp.toPx(), Offset(pos * w, size.height / 2f))
+            drawCircle(Color.Black, 1.8.dp.toPx(), Offset(pos * w, size.height / 2f))
+        }
+        drawCircle(Color.White, 5.dp.toPx(), Offset((progress * w).coerceIn(5.dp.toPx(), w - 5.dp.toPx()), size.height / 2f))
+    }
+}
+
+/** شكل الجزيرة الحالي (عشان نرسم حوله) */
+private fun islandRect(w: Float, h: Float, top: Float, cx: Float, grow: Float) =
+    RoundRect(cx - w / 2f - grow, top - grow, cx + w / 2f + grow, top + h + grow, CornerRadius(minOf(w, h) / 2f + grow, minOf(w, h) / 2f + grow))
+
+/** حلقة حول الكبسولة تنقص مع المؤقت (تبدأ من فوق بالنص وتمشي مع عقارب الساعة) */
+@Composable
+private fun TimerRing(
+    a: Act, aw: Animatable<Float, AnimationVector1D>, ah: Animatable<Float, AnimationVector1D>,
+    aTop: Animatable<Float, AnimationVector1D>, aCorner: Animatable<Float, AnimationVector1D>, cx: Float,
+) {
+    val now = rememberNow(true)
+    // المدة الكاملة = اللي باقي أول ما شفنا المؤقت (لو زادت، نحدثها)
+    val totals = remember { HashMap<String, Long>() }
+    val left = (a.chrono - now).coerceAtLeast(0L)
+    val total = maxOf(totals[a.key] ?: 0L, left, 1L).also { totals[a.key] = it }
+    val frac by animateFloatAsState((left.toFloat() / total).coerceIn(0f, 1f), tween(1000, easing = LinearEasing), label = "ring")
+    val c = tint(a)
+    Canvas(Modifier.fillMaxSize()) {
+        val sw = 2.4.dp.toPx()
+        val w = aw.value; val h = ah.value
+        if (w <= 0f || h <= 0f) return@Canvas
+        val path = Path().apply { addRoundRect(islandRect(w, h, aTop.value, cx, sw / 2f + 1.dp.toPx())) }
+        val pm = PathMeasure().apply { setPath(path, false) }
+        val len = pm.length
+        if (len <= 0f) return@Canvas
+        drawPath(path, c.copy(alpha = 0.16f), style = Stroke(sw))
+        // البداية من نص الحافة اللي فوق
+        val start = (w / 2f - minOf(w, h) / 2f).coerceAtLeast(0f)
+        val end = start + len * frac
+        val seg = Path()
+        pm.getSegment(start, minOf(end, len), seg, true)
+        if (end > len) pm.getSegment(0f, end - len, seg, true)
+        drawPath(seg, c, style = Stroke(sw, cap = StrokeCap.Round))
+    }
+}
+
+/** توهج ملون يدور حول الجزيرة وقت المساعد الصوتي يسمع */
+@Composable
+private fun AssistHalo(
+    aw: Animatable<Float, AnimationVector1D>, ah: Animatable<Float, AnimationVector1D>,
+    aTop: Animatable<Float, AnimationVector1D>, aCorner: Animatable<Float, AnimationVector1D>, cx: Float, still: Boolean,
+) {
+    val spin = rememberInfiniteTransition(label = "halo")
+    val ang by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "ang")
+    val pulse by spin.animateFloat(0.55f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "pulse")
+    val colors = intArrayOf(0xFF5AC8FA.toInt(), 0xFFBF5AF2.toInt(), 0xFFFF6482.toInt(), 0xFFFF9F0A.toInt(), 0xFF5AC8FA.toInt())
+    Canvas(Modifier.fillMaxSize()) {
+        val w = aw.value; val h = ah.value
+        if (w <= 0f || h <= 0f) return@Canvas
+        val cy = aTop.value + h / 2f
+        val brush = object : ShaderBrush() {
+            override fun createShader(size: Size): Shader = android.graphics.SweepGradient(cx, cy, colors, null).apply {
+                setLocalMatrix(android.graphics.Matrix().apply { setRotate(if (still) 0f else ang, cx, cy) })
+            }
+        }
+        val p = if (still) 1f else pulse
+        // طبقات شفافة للتوهج، وبعدين الحد نفسه
+        for (i in 3 downTo 1) {
+            val g = i * 2.5.dp.toPx()
+            val path = Path().apply { addRoundRect(islandRect(w, h, aTop.value, cx, g)) }
+            drawPath(path, brush, alpha = 0.16f * p / i, style = Stroke(g * 1.4f))
+        }
+        val path = Path().apply { addRoundRect(islandRect(w, h, aTop.value, cx, 1.dp.toPx())) }
+        drawPath(path, brush, alpha = 0.95f, style = Stroke(2.2.dp.toPx()))
     }
 }

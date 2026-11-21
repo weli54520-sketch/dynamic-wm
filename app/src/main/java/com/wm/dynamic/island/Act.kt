@@ -14,6 +14,12 @@ enum class Kind {
     ALARM,
     /** لوحة السطوع والصوت (ضغطة على الكاميرا) */
     CONTROLS,
+    /** المساعد الصوتي يسمع: توهج ملون حول الجزيرة */
+    ASSIST,
+    /** تطبيق يستخدم الكاميرا أو المايك */
+    PRIVACY,
+    /** الحيوان الصغير اللي يعيش في الجزيرة (وقت ما فيه شي) */
+    PET,
 }
 
 /** أزرار التحكم (اللي ما يدعمها النشاط تكون null) */
@@ -68,6 +74,12 @@ data class Act(
     val until: Long = 0L,
     val stamp: Long = 0L,
     val controls: Controls? = null,
+    /** تحديثات حية (أندرويد 16): مراحل الشريط (الطول من 0 لـ 1، اللون) */
+    val segments: List<Pair<Float, Int>> = emptyList(),
+    /** نقاط على الشريط (المكان من 0 لـ 1، اللون) */
+    val points: List<Pair<Float, Int>> = emptyList(),
+    /** نص قصير مهم (مثل "5 د" للتوصيل) يطلع في الجزيرة الصغيرة */
+    val chip: String = "",
 )
 
 object Pri {
@@ -76,12 +88,15 @@ object Pri {
     const val CALL_ON = 95
     const val NOTIF = 90
     const val CONTROLS = 92
+    const val ASSIST = 93
     const val EVENT = 85
     const val NAV = 80
     const val RECORD = 75
     const val TIMER = 70
     const val ALARM = 69
     const val MISSED = 65
+    const val PRIVACY = 40
+    const val PET = 0
     const val MEDIA = 60
     const val PROGRESS = 50
     const val TORCH = 40

@@ -92,6 +92,14 @@ object P {
     val alarm = BoolPref("f_alarm", true)
     /** تسجيل الشاشة والصوت */
     val record = BoolPref("f_record", true)
+    /** حلقة حول الكبسولة تنقص مع المؤقت */
+    val timerRing = BoolPref("f_timer_ring", true)
+    /** توهج ملون وقت المساعد الصوتي يسمع */
+    val assist = BoolPref("f_assist", true)
+    /** نقطة لما تطبيق يستخدم الكاميرا أو المايك */
+    val privacy = BoolPref("f_privacy", true)
+    /** الحيوان الصغير (يخلي الجزيرة ظاهرة دايم) */
+    val pet = BoolPref("f_pet", false)
     val nav = BoolPref("f_nav", true)
     val progress = BoolPref("f_progress", true)
     val ongoing = BoolPref("f_ongoing", true)

@@ -1,11 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة WM Island (B2): دائرة سودا، قوس، حروف WM، وكبسولة على حد الدائرة فيها عدسة -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- كبسولة سوداء فيها الكاميرا ونقطة زرقاء -->
-    <path android:fillColor="#FF000000" android:pathData="M38,44h32a10,10 0,0 1,0 20h-32a10,10 0,0 1,0 -20z" />
-    <path android:fillColor="#33FFFFFF" android:pathData="M38,44.6h32a9.4,9.4 0,0 1,0 18.8h-32a9.4,9.4 0,0 1,0 -18.8zM38,45.4a8.6,8.6 0,0 0,0 17.2h32a8.6,8.6 0,0 0,0 -17.2z" />
-    <path android:fillColor="#FF1C1C22" android:pathData="M54,54m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0" />
-    <path android:fillColor="#FF4C8DFF" android:pathData="M67,54m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0" />
-    <path android:fillColor="#FF4C8DFF" android:pathData="M38.5,50.5h1.8v7h-1.8zM41.6,48.5h1.8v11h-1.8zM44.7,51.5h1.8v5h-1.8z" />
+    <path android:fillColor="#FF050507" android:strokeColor="#B38A8FB8" android:strokeWidth="1.125" android:pathData="M30.75,54a23.25,23.25 0,1 1,46.5,0a23.25,23.25 0,1 1,-46.5,0z" />
+    <path android:strokeColor="#E6E4E4EC" android:strokeWidth="1.688" android:strokeLineCap="round" android:pathData="M36.225,47.55A19.125,19.125 0,0 1,45.9,36.675" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54.81 47.554 51.565 58.5H49.533L47.234 50.215L44.793 58.5L42.777 58.516L39.674 47.554H41.58L43.848 56.468L46.305 47.554H48.321L50.604 56.421L52.888 47.554ZM67.444 47.554V58.5H65.649V51.003L62.31 58.5H61.065L57.711 51.003V58.5H55.915V47.554H57.852L61.695 56.138L65.523 47.554Z" />
+    <path android:fillColor="#FF050507" android:strokeColor="#E68A8FB8" android:strokeWidth="1.125" android:pathData="M49.125,31.875h9.75a2.625,2.625 0,0 1,0,5.25h-9.75a2.625,2.625 0,0 1,0,-5.25z" />
+    <path android:pathData="M57.225,34.5a1.275,1.275 0,1 1,2.55,0a1.275,1.275 0,1 1,-2.55,0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="58.117" android:centerY="34.117" android:gradientRadius="1.785">
+                <item android:offset="0" android:color="#FF6A70C0" />
+                <item android:offset="0.55" android:color="#FF23264F" />
+                <item android:offset="1" android:color="#FF0B0C1C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#B3FFFFFF" android:pathData="M57.675,34.05a0.375,0.375 0,1 1,0.75,0a0.375,0.375 0,1 1,-0.75,0z" />
 </vector>

@@ -29,6 +29,9 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
     private val main = Handler(Looper.getMainLooper())
     private var started = false
     private val torchOn = HashSet<String>()
+    private val privacy = Privacy(ctx)
+    /** آخر نسبة بطارية (عشان ننبه أول ما تنزل تحت 20٪ و10٪) */
+    private var lastLv = -1
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
@@ -91,6 +94,7 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
             addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(Intent.ACTION_BATTERY_LOW)
             addAction(Intent.ACTION_BATTERY_OKAY)
+            addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
@@ -102,6 +106,8 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
         try { ContextCompat.registerReceiver(ctx, receiver, f, ContextCompat.RECEIVER_EXPORTED) } catch (_: Exception) {}
         try { ctx.getSystemService(CameraManager::class.java).registerTorchCallback(torchCb, main) } catch (_: Exception) {}
         readSaver()
+        lastLv = battery()
+        privacy.start()
         try {
             val am = ctx.getSystemService(AudioManager::class.java)
             MediaVol.set(am.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1))
@@ -114,6 +120,19 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
         try { ctx.unregisterReceiver(receiver) } catch (_: Exception) {}
         try { ctx.getSystemService(CameraManager::class.java).unregisterTorchCallback(torchCb) } catch (_: Exception) {}
         Hub.remove("ev_torch")
+        privacy.stop()
+    }
+
+    /** تنبيه البطارية المتحرك: يكبر لحاله، وفيه زر توفير الطاقة */
+    private fun lowBattery(lv: Int) {
+        Hub.flash(Act("ev_low", Kind.BATTERY_LOW, Pri.EVENT, title = t("البطارية ضعيفة", "Low battery"),
+            text = t("$lv٪ متبقية", "$lv% left"), level = lv, accent = Accents.RED, autoExpand = true,
+            controls = Controls(actions = listOf(t("توفير الطاقة", "Power saving") to {
+                try {
+                    ctx.startActivity(Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {}
+            }))), 6000)
     }
 
     private fun battery(): Int = try {
@@ -146,11 +165,16 @@ class SystemEvents(private val ctx: Context, private val onScreen: (Boolean) -> 
             }
             PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> readSaver()
             Intent.ACTION_BATTERY_OKAY -> Saver.setLow(false)
-            Intent.ACTION_BATTERY_LOW -> {
-                Saver.setLow(true)
-                val lv = battery()
-                Hub.flash(Act("ev_low", Kind.BATTERY_LOW, Pri.EVENT, title = t("البطارية ضعيفة", "Low battery"),
-                    text = if (lv >= 0) "$lv%" else "", level = lv, accent = Accents.RED), 4500)
+            Intent.ACTION_BATTERY_LOW -> Saver.setLow(true)
+            Intent.ACTION_BATTERY_CHANGED -> {
+                val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+                val lv = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100 / scale
+                val plugged = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+                val prev = lastLv
+                lastLv = lv
+                // ننبه مرة وحدة: لما تنزل تحت 20٪ وتحت 10٪ (مثل آيفون)
+                val crossed = prev >= 0 && lv in 0..20 && listOf(20, 10).any { prev > it && lv <= it }
+                if (crossed && !plugged) lowBattery(lv)
             }
             BluetoothDevice.ACTION_ACL_CONNECTED, BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                 val on = i.action == BluetoothDevice.ACTION_ACL_CONNECTED

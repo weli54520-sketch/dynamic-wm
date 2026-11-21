@@ -220,9 +220,12 @@ class NotifListener : NotificationListenerService() {
         val indet = ex.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE)
         if ((max > 0 && prog < max) || (indet && ongoing)) {
             if (!blocked) {
+                // التحديثات الحية (أندرويد 16): مراحل ونقاط على الشريط + نص قصير (مثل وقت الوصول)
+                val live = liveUpdate(ex, max)
                 Hub.put(Act(key, Kind.PROGRESS, Pri.PROGRESS, title = title.ifEmpty { app }, text = text, app = app, pkg = pkg,
                     icon = Apps.icon(this, pkg), accent = color, indeterminate = indet || max <= 0,
-                    progress = if (max > 0) prog.toFloat() / max else -1f, controls = Controls(open = open, actions = buttons(n))))
+                    progress = if (max > 0) prog.toFloat() / max else -1f, controls = Controls(open = open, actions = buttons(n)),
+                    segments = live.first, points = live.second, chip = ex.getCharSequence(EXTRA_SHORT_TEXT)?.toString()?.trim().orEmpty()))
             }
             return
         }
@@ -260,6 +263,26 @@ class NotifListener : NotificationListenerService() {
                 accent = color, controls = Controls(open = open)),
             P.notifSec.v.coerceIn(2, 15) * 1000L,
         )
+    }
+
+    /** نقرأ مراحل ونقاط ProgressStyle (أندرويد 16). أي شي ناقص = نرجع فاضي ويطلع شريط عادي */
+    private fun liveUpdate(ex: android.os.Bundle, max: Int): Pair<List<Pair<Float, Int>>, List<Pair<Float, Int>>> = try {
+        val segs = bundles(ex, "android.progressSegments").map { it.getInt("length", 0) to segColor(it) }.filter { it.first > 0 }
+        val total = segs.sumOf { it.first }.takeIf { it > 0 } ?: max
+        val segments = if (total > 0) segs.map { it.first.toFloat() / total to it.second } else emptyList()
+        val points = if (total > 0) bundles(ex, "android.progressPoints")
+            .map { (it.getInt("position", -1).toFloat() / total) to segColor(it) }.filter { it.first in 0f..1f } else emptyList()
+        segments to points
+    } catch (_: Exception) { emptyList<Pair<Float, Int>>() to emptyList() }
+
+    @Suppress("DEPRECATION")
+    private fun bundles(ex: android.os.Bundle, k: String): List<android.os.Bundle> =
+        ex.getParcelableArrayList<android.os.Bundle>(k) ?: emptyList()
+
+    private fun segColor(b: android.os.Bundle): Int = when {
+        b.containsKey("colorInt") -> b.getInt("colorInt")
+        b.containsKey("color") -> b.getInt("color")
+        else -> 0
     }
 
     private fun isMissed(pkg: String, n: Notification, title: String, text: String): Boolean {
@@ -476,6 +499,8 @@ class NotifListener : NotificationListenerService() {
         private val CLOCKS = setOf(
             "com.sec.android.app.clockpackage", "com.google.android.deskclock", "com.android.deskclock",
         )
+        /** Notification.EXTRA_SHORT_CRITICAL_TEXT (أندرويد 16) */
+        private const val EXTRA_SHORT_TEXT = "android.shortCriticalText"
         private val DIALERS = listOf("dialer", "incallui", "contacts", "telecom", ".phone")
         private val MISSED_WORDS = listOf("فائت", "فايت", "missed", "لم يتم الرد")
         private val RECORDERS = listOf("screenrecord", "screen_record", "smartcapture", "voicenote", "recorder")

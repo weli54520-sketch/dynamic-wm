@@ -83,14 +83,19 @@ object Hub {
         Kind.RECORD -> P.record.v
         Kind.MISSED -> P.missed.v
         Kind.ALARM -> P.alarm.v
-        Kind.GREETING, Kind.PREVIEW, Kind.CONTROLS -> true
+        Kind.ASSIST -> P.assist.v
+        Kind.PRIVACY -> P.privacy.v
+        Kind.GREETING, Kind.PREVIEW, Kind.CONTROLS, Kind.PET -> true
     }
 
     private fun publish() {
         val now = SystemClock.uptimeMillis()
         acts.values.removeAll { it.until in 1..now }
+        // تطبيق يشغّل فيديو أو أغنية: إشعار "قيد التشغيل" حقه ما له داعي (دائرة وحدة لكل تطبيق)
+        val playing = acts.values.filter { it.kind == Kind.MEDIA }.mapNotNullTo(HashSet()) { it.pkg }
         _list.value = if (!P.enabled.v) emptyList() else acts.values
             .filter { allowed(it) && snoozed[it.key] != it.title }
+            .filterNot { it.kind == Kind.ONGOING && it.pkg != null && it.pkg in playing }
             .sortedWith(compareByDescending<Act> { it.priority }.thenByDescending { it.stamp })
         main.removeCallbacks(expire)
         val next = acts.values.filter { it.until > 0 }.minOfOrNull { it.until }

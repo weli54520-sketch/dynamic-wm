@@ -29,6 +29,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Pets
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.FiberManualRecord
 import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.BatteryChargingFull
@@ -279,8 +282,14 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
                     t("تبقى لين تمسحها، وفيها زر الاتصال", "Stays until cleared, with a call back button"), P.missed)
             }
             ToggleRow(Icons.Rounded.Timer, cOrange, t("المؤقت والساعة", "Timers"), t("المؤقت وساعة الإيقاف والتسجيل", "Timer, stopwatch and recorders"), P.timer)
+            Sub { ToggleRow(null, cOrange, t("حلقة حول الكبسولة", "Ring around the island"),
+                t("تنقص مع المؤقت لين يخلص", "Shrinks as the timer runs down"), P.timerRing) }
             ToggleRow(Icons.Rounded.Alarm, cOrange, t("المنبه", "Alarms"), t("وقت ما يرن يكبر وفيه إيقاف وغفوة", "Expands while ringing, with dismiss and snooze"), P.alarm)
             ToggleRow(Icons.Rounded.FiberManualRecord, cRed, t("التسجيل", "Recording"), t("تسجيل الشاشة والصوت: نقطة حمرا وعداد", "Screen and voice recording: red dot and timer"), P.record)
+            ToggleRow(Icons.Rounded.AutoAwesome, cPurple, t("المساعد الصوتي", "Voice assistant"),
+                t("توهج ملون حول الجزيرة وقت ما يسمعك", "Colorful glow while it's listening"), P.assist)
+            ToggleRow(Icons.Rounded.Videocam, cGreen, t("الكاميرا والمايك", "Camera & mic"),
+                t("نقطة خضرا للكاميرا وبرتقالية للمايك لما تطبيق يستخدمها", "Green dot for camera, orange for mic"), P.privacy)
             ToggleRow(Icons.Rounded.Navigation, cBlue, t("الخرائط", "Navigation"), t("الاتجاهات من تطبيقات الخرائط", "Directions from maps apps"), P.nav)
             ToggleRow(Icons.Rounded.Download, cCyan, t("التحميل والتقدم", "Downloads & progress"), t("أي تحميل أو رفع فيه نسبة", "Any download or upload"), P.progress)
             ToggleRow(Icons.Rounded.Sync, cPurple, t("التطبيقات بالخلفية", "Background apps"), t("أي تطبيق شغال بالخلفية يطلع لحاله", "Apps running in the background"), P.ongoing)
@@ -304,7 +313,8 @@ fun ActivitiesScreen(wide: Boolean, open: (String) -> Unit) {
         SectionTitle(t("أحداث الجوال", "Phone events"))
         GlassCard {
             ToggleRow(Icons.Rounded.BatteryChargingFull, cGreen, t("الشحن", "Charging"), t("لما توصل الشاحن أو تفصله", "Plug in / unplug"), P.evCharge)
-            ToggleRow(Icons.Rounded.BatteryAlert, cRed, t("البطارية الضعيفة", "Low battery"), pref = P.evBattery)
+            ToggleRow(Icons.Rounded.BatteryAlert, cRed, t("البطارية الضعيفة", "Low battery"),
+                t("تنبيه متحرك عند 20٪ و10٪", "Animated alert at 20% and 10%"), P.evBattery)
             ToggleRow(Icons.Rounded.Bluetooth, cBlue, t("البلوتوث", "Bluetooth"), t("لما تتصل سماعة أو ساعة", "Headphones, watches..."), P.evBt)
             ToggleRow(Icons.Rounded.Headphones, cCyan, t("السماعة السلكية", "Wired headphones"), pref = P.evHeadset)
             ToggleRow(Icons.Rounded.Vibration, cOrange, t("الصامت والاهتزاز", "Silent / vibrate"), pref = P.evRinger)
@@ -440,6 +450,9 @@ fun LookScreen(wide: Boolean) {
             Text(t("الضغطة الطويلة تسوي العكس. والسحب يمين ويسار يبدّل بين التطبيقات (وعلى الأغنية يغيّرها).",
                 "Long press does the other. Swipe sideways to switch apps (or change the song)."), style = ts(12.5f, color = Faint))
             Spacer(Modifier.height(6.dp))
+            ToggleRow(Icons.Rounded.Pets, cPink, t("الحيوان الصغير", "Island pet"),
+                t("عيون تعيش في الجزيرة وقت ما فيه شي: ترمش وتنام وتصحى مع الإشعارات. ضغطة تصحيه، ضغطة طويلة للسطوع والصوت، سحب لفوق ينام ساعة",
+                    "Eyes live in the island when idle: they blink, sleep and wake on alerts. Tap to wake, long press for brightness & volume, swipe up to nap an hour"), P.pet)
             ToggleRow(null, Color.White, t("ضغطة على الكاميرا", "Tap the camera"),
                 t("والجزيرة مخفية: السطوع والصوت. والسحب لتحت منها يفتح الإشعارات", "When hidden: brightness and volume. Swipe down from it for notifications"), P.camTap)
             ToggleRow(null, Color.White, t("إخفاء بالوضع الأفقي", "Hide in landscape"), pref = P.hideLandscape)
