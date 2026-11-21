@@ -15,7 +15,6 @@ import androidx.compose.material.icons.rounded.Pets
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.PathMeasure
-import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.platform.LocalContext
 import android.graphics.ColorMatrix
